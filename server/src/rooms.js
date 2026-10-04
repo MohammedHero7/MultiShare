@@ -40,6 +40,7 @@ class Room {
     this.updatedAt = Date.now();
     this.seq = 0;
     this.loadSeq = 0;
+    this.youtubeLoading = false;
     this.expiry = null;
   }
 
@@ -120,15 +121,24 @@ class Room {
 
   /** Load a link or a library file for everyone. Starts paused at 0:00. */
   async load(source, by) {
+    const youtubeId = source.path ? null : youtubeVideoId(source.url);
+    // Each YouTube lookup starts a yt-dlp process, so a room gets one at a time.
+    if (youtubeId && this.youtubeLoading) {
+      throw new UserError('A YouTube video is still loading. Try again when it has opened.');
+    }
     const ticket = ++this.loadSeq;
     let media;
-    const youtubeId = source.path ? null : youtubeVideoId(source.url);
     if (source.path) {
       await assertLibraryVideo(source.path);
       const name = source.path.split('/').pop();
       media = { source: 'library', path: source.path, title: prettyName(name), kind: 'file', src: libraryUrl(source.path) };
     } else if (youtubeId) {
-      media = { source: 'youtube', url: `https://www.youtube.com/watch?v=${youtubeId}`, ...(await loadYouTube(youtubeId)) };
+      this.youtubeLoading = true;
+      try {
+        media = { source: 'youtube', url: `https://www.youtube.com/watch?v=${youtubeId}`, ...(await loadYouTube(youtubeId)) };
+      } finally {
+        this.youtubeLoading = false;
+      }
     } else {
       const probe = await probeUrl(source.url);
       media = {

@@ -18,8 +18,14 @@ const CACHE_MS = 3 * 60 * 60 * 1000; // stream URLs last about 6 hours
 const RESOLVE_TIMEOUT_MS = 60_000;
 const INSTALL_HINT = 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.';
 const UPDATE_HINT = 'Updating yt-dlp often fixes this: run "yt-dlp -U" or "winget upgrade yt-dlp.yt-dlp".';
+// Each yt-dlp run is a Python process plus a Node process, so only a few run at
+// once and a short queue waits; anything beyond that is turned away.
+const MAX_RUNS = 2;
+const MAX_QUEUED = 6;
 
 const cache = new Map(); // video id -> { at, promise }
+const waiting = []; // start functions for runs waiting for a free slot
+let running = 0;
 
 /** The 11-character video id from any common YouTube link, or null. */
 export function youtubeVideoId(raw) {
@@ -80,10 +86,26 @@ export async function handleYouTube(req, res) {
 
 /** Log at startup whether YouTube links will work, so a missing yt-dlp shows up early. */
 export function logYouTubeSupport() {
-  execFile(config.ytDlpPath, ['--version'], { windowsHide: true, timeout: 15000 }, (error, stdout) => {
-    if (error) console.warn(`  ! yt-dlp was not found, so YouTube links won't work. ${INSTALL_HINT}`);
-    else console.log(`  YouTube links: on (yt-dlp ${String(stdout).trim()})`);
-  });
+  const report = (error, stdout) => {
+    if (error?.code === 'ENOENT') {
+      console.warn(`  ! yt-dlp was not found, so YouTube links won't work. ${INSTALL_HINT}`);
+    } else if (error) {
+      console.warn(`  ! yt-dlp didn't start (${error.code || error.message}), so YouTube links may not work.`);
+    } else {
+      console.log(`  YouTube links: on (yt-dlp ${String(stdout).trim()})`);
+      // yt-dlp only uses Node 22 or newer to solve YouTube's JavaScript checks.
+      if (Number(process.versions.node.split('.')[0]) < 22) {
+        console.warn(
+          `  ! yt-dlp needs Node.js 22 or newer for YouTube (this is ${process.version}). Install the current LTS: winget install OpenJS.NodeJS.LTS`,
+        );
+      }
+    }
+  };
+  try {
+    execFile(config.ytDlpPath, ['--version'], { windowsHide: true, timeout: 15000 }, report);
+  } catch (error) {
+    report(error);
+  }
 }
 
 function isCached(id) {
@@ -96,12 +118,32 @@ function resolveYouTube(id, { fresh = false } = {}) {
   for (const [key, entry] of cache) {
     if (Date.now() - entry.at >= CACHE_MS) cache.delete(key);
   }
-  const entry = { at: Date.now(), promise: runYtDlp(id) };
+  const entry = { at: Date.now(), promise: withRunSlot(() => runYtDlp(id)) };
   cache.set(id, entry);
   entry.promise.catch(() => {
     if (cache.get(id) === entry) cache.delete(id);
   });
   return entry.promise;
+}
+
+/** Run `task` when fewer than MAX_RUNS are running; turn it away if the queue is full. */
+function withRunSlot(task) {
+  if (running >= MAX_RUNS && waiting.length >= MAX_QUEUED) {
+    return Promise.reject(new UserError('The server is busy getting other YouTube videos. Try again in a moment.'));
+  }
+  return new Promise((resolve, reject) => {
+    const start = () => {
+      running += 1;
+      task()
+        .then(resolve, reject)
+        .finally(() => {
+          running -= 1;
+          waiting.shift()?.();
+        });
+    };
+    if (running < MAX_RUNS) start();
+    else waiting.push(start);
+  });
 }
 
 const isOk = (status) => status >= 200 && status < 400;

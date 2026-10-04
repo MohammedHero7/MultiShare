@@ -110,33 +110,48 @@ export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}
         return;
       }
 
+      // Redirect hops run outside the Promise executor, so anything that throws
+      // here must become a rejection instead of crashing the server.
       const lib = url.protocol === 'https:' ? https : http;
-      const req = lib.request(
-        url,
-        {
-          method: 'GET',
-          headers: { 'user-agent': BROWSER_UA, accept: '*/*', ...headers },
-          agent: agents[url.protocol],
-          lookup: guardedLookup,
-          family: IPV4_ONLY_HOSTS.test(url.hostname) ? 4 : undefined,
-          signal,
-        },
-        (res) => {
-          req.setTimeout(0);
-          const location = res.headers.location;
-          if (location && [301, 302, 303, 307, 308].includes(res.statusCode)) {
-            res.resume();
-            if (++hops > 5) {
-              reject(new UserError('That link redirects too many times.'));
+      let req;
+      try {
+        req = lib.request(
+          url,
+          {
+            method: 'GET',
+            headers: { 'user-agent': BROWSER_UA, accept: '*/*', ...headers },
+            agent: agents[url.protocol],
+            lookup: guardedLookup,
+            family: IPV4_ONLY_HOSTS.test(url.hostname) ? 4 : undefined,
+            signal,
+          },
+          (res) => {
+            req.setTimeout(0);
+            const location = res.headers.location;
+            if (location && [301, 302, 303, 307, 308].includes(res.statusCode)) {
+              res.resume();
+              if (++hops > 5) {
+                reject(new UserError('That link redirects too many times.'));
+                return;
+              }
+              let next;
+              try {
+                next = new URL(location, url).href;
+              } catch {
+                reject(new UserError('That link redirects to an invalid address.'));
+                return;
+              }
+              attempt(next);
               return;
             }
-            attempt(new URL(location, url).href);
-            return;
-          }
-          res.finalUrl = url.href;
-          resolve(res);
-        },
-      );
+            res.finalUrl = url.href;
+            resolve(res);
+          },
+        );
+      } catch (error) {
+        reject(error);
+        return;
+      }
       req.setTimeout(timeoutMs, () => {
         req.destroy(new UserError('The video server took too long to respond.'));
       });
