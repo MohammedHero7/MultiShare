@@ -28,6 +28,7 @@ export class Player {
     this.mutedByPolicy = false;
     this.playRequest = false;
     this.nudging = false;
+    this.preferredHeight = 0; // 0 = automatic; set from the viewer's saved choice
 
     video.addEventListener('loadedmetadata', () => this.sync(true));
     video.addEventListener('canplay', () => this.sync(false));
@@ -150,6 +151,12 @@ export class Player {
     hls.on(Hls.Events.FRAG_LOADED, () => {
       networkRetries = 0;
     });
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      const choice = this.qualityForHeight(this.preferredHeight);
+      if (choice) hls.currentLevel = choice.index;
+      this.emit('levels');
+    });
+    hls.on(Hls.Events.LEVEL_SWITCHED, () => this.emit('levels'));
 
     hls.loadSource(src);
     hls.attachMedia(this.video);
@@ -159,7 +166,48 @@ export class Player {
     if (this.hls) {
       this.hls.destroy();
       this.hls = null;
+      this.emit('levels');
     }
+  }
+
+  /* ---------- Quality: each viewer picks their own ---------- */
+
+  /** Qualities of the current stream, best first: [{ index, height }]. Empty unless it has several. */
+  qualities() {
+    const byHeight = new Map();
+    (this.hls?.levels ?? []).forEach((level, index) => {
+      const height = level.height || 0;
+      const best = byHeight.get(height);
+      if (height && (!best || level.bitrate > best.bitrate)) byHeight.set(height, { index, height, bitrate: level.bitrate });
+    });
+    const list = [...byHeight.values()].sort((a, b) => b.height - a.height);
+    return list.length > 1 ? list.map(({ index, height }) => ({ index, height })) : [];
+  }
+
+  /** The best quality no taller than `height`, or the smallest one if all are taller. */
+  qualityForHeight(height) {
+    if (!height) return null;
+    const list = this.qualities();
+    return list.find((quality) => quality.height <= height) ?? list.at(-1) ?? null;
+  }
+
+  /** True while hls.js picks the quality by itself. */
+  get qualityAuto() {
+    return !this.hls || this.hls.autoLevelEnabled;
+  }
+
+  /** Height of the quality on screen now (0 if unknown). */
+  get playingHeight() {
+    return this.hls?.levels?.[this.hls.currentLevel]?.height || 0;
+  }
+
+  /** 0 for automatic, otherwise a height from qualities(). Switches without stopping playback. */
+  setQuality(height) {
+    this.preferredHeight = height;
+    if (!this.hls) return;
+    const choice = this.qualityForHeight(height);
+    this.hls.nextLevel = choice ? choice.index : -1;
+    this.emit('levels');
   }
 
   onVideoError() {

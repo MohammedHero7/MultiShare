@@ -1,11 +1,13 @@
-// YouTube links. yt-dlp (installed separately) turns a watch link into a stream
-// URL, and the video then flows through /api/media like any other link.
+// YouTube links and the YouTube tab. yt-dlp (installed separately) turns a
+// watch link into a stream URL, and the video then flows through /api/media like
+// any other link. It also searches YouTube and lists playlists.
 //
 // YouTube stream URLs expire after a few hours and only work from the IP address
 // that asked for them. So the activity gets a stable /api/youtube link that
 // re-resolves when needed, and yt-dlp and the proxy both stick to IPv4.
 
 import { execFile, spawn } from 'node:child_process';
+import { pipeline } from 'node:stream';
 import { config } from './config.js';
 import { UserError } from './errors.js';
 import { rewritePlaylist } from './media.js';
@@ -15,7 +17,11 @@ import { proxiedUrl, verifyYouTube, youtubeUrl } from './signing.js';
 const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com)$/i;
 const SHORT_HOSTS = /^(www\.)?youtu\.be$/i;
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+const LIST_ID = /^[A-Za-z0-9_-]{10,80}$/;
 const CACHE_MS = 3 * 60 * 60 * 1000; // stream URLs last about 6 hours
+const FIND_CACHE_MS = 10 * 60 * 1000;
+const SEARCH_RESULTS = 20;
+const PLAYLIST_LIMIT = 100;
 const RESOLVE_TIMEOUT_MS = 60_000;
 const INSTALL_HINT = 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.';
 const UPDATE_HINT = 'Updating yt-dlp often fixes this: run "yt-dlp -U" or "winget upgrade yt-dlp.yt-dlp".';
@@ -27,8 +33,13 @@ const MAX_RUNS = 2;
 const MAX_QUEUED = 6;
 
 const cache = new Map(); // video id -> { at, promise }
+const findCache = new Map(); // search or playlist -> { at, promise }
 const waiting = []; // start functions for runs waiting for a free slot
 let running = 0;
+let ytDlpFound = null; // set by the startup check
+
+/** False only when the startup check showed yt-dlp is missing. */
+export const youtubeAvailable = () => ytDlpFound !== false;
 
 /** The 11-character video id from any common YouTube link, or null. */
 export function youtubeVideoId(raw) {
@@ -47,6 +58,76 @@ export function youtubeVideoId(raw) {
     else if (['shorts', 'live', 'embed', 'v', 'e'].includes(first)) id = second;
   }
   return id && VIDEO_ID.test(id) ? id : null;
+}
+
+/** The playlist id from a YouTube link with ?list=, or null. */
+export function youtubePlaylistId(raw) {
+  let url;
+  try {
+    url = new URL(String(raw ?? '').trim());
+  } catch {
+    return null;
+  }
+  if (!YOUTUBE_HOSTS.test(url.hostname) && !SHORT_HOSTS.test(url.hostname)) return null;
+  const list = url.searchParams.get('list');
+  return list && LIST_ID.test(list) ? list : null;
+}
+
+/**
+ * For the YouTube tab: search YouTube, or list a playlist when given a playlist
+ * link. Resolves to [{ id, title, channel, duration, live }].
+ */
+export function findYouTube(query) {
+  const text = String(query ?? '').trim();
+  if (!text) return Promise.reject(new UserError('Type what you want to watch, or paste a playlist link.'));
+  const list = youtubePlaylistId(text);
+  const target = list ? `https://www.youtube.com/playlist?list=${list}` : `ytsearch${SEARCH_RESULTS}:${text.slice(0, 120)}`;
+
+  const cached = findCache.get(target);
+  if (cached && Date.now() - cached.at < FIND_CACHE_MS) return cached.promise;
+  for (const [key, entry] of findCache) {
+    if (Date.now() - entry.at >= FIND_CACHE_MS) findCache.delete(key);
+  }
+  const entry = {
+    at: Date.now(),
+    promise: withRunSlot(() => runYtDlp(listArgs(target), list ? `playlist ${list}` : 'search')).then(parseEntries),
+  };
+  findCache.set(target, entry);
+  entry.promise.catch(() => {
+    if (findCache.get(target) === entry) findCache.delete(target);
+  });
+  return entry.promise;
+}
+
+/** GET /api/ytthumb?v=<id>: a video's thumbnail. The activity can only load images from its own server. */
+export async function handleThumbnail(req, res) {
+  const id = String(req.query.v ?? '');
+  if (!VIDEO_ID.test(id)) {
+    res.status(400).end();
+    return;
+  }
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished) controller.abort();
+  });
+  try {
+    const upstream = await request(`https://i.ytimg.com/vi/${id}/mqdefault.jpg`, {
+      signal: controller.signal,
+      timeoutMs: 10000,
+    });
+    if (upstream.statusCode >= 400) {
+      upstream.resume();
+      res.status(404).end();
+      return;
+    }
+    res.status(200).set({
+      'content-type': upstream.headers['content-type'] || 'image/jpeg',
+      'cache-control': 'public, max-age=86400',
+    });
+    pipeline(upstream, res, () => {});
+  } catch {
+    if (!res.headersSent) res.status(502).end();
+  }
 }
 
 /** Resolve a video for Room.load: its title and how the client should play it. */
@@ -137,6 +218,7 @@ export function limitHeight(text, maxHeight) {
 /** Log at startup whether YouTube links will work, so a missing yt-dlp shows up early. */
 export function logYouTubeSupport() {
   const report = (error, stdout) => {
+    ytDlpFound = error?.code !== 'ENOENT';
     if (error?.code === 'ENOENT') {
       console.warn(`  ! yt-dlp was not found, so YouTube links won't work. ${INSTALL_HINT}`);
     } else if (error) {
@@ -168,7 +250,7 @@ function resolveYouTube(id, { fresh = false } = {}) {
   for (const [key, entry] of cache) {
     if (Date.now() - entry.at >= CACHE_MS) cache.delete(key);
   }
-  const entry = { at: Date.now(), promise: withRunSlot(() => runYtDlp(id)) };
+  const entry = { at: Date.now(), promise: withRunSlot(() => runYtDlp(videoArgs(id), id)).then(parseVideo) };
   cache.set(id, entry);
   entry.promise.catch(() => {
     if (cache.get(id) === entry) cache.delete(id);
@@ -216,7 +298,7 @@ async function checkStream(info) {
   }
 }
 
-function ytDlpArgs(id) {
+function videoArgs(id) {
   return [
     '--ignore-config',
     '--no-playlist',
@@ -238,7 +320,73 @@ function ytDlpArgs(id) {
   ];
 }
 
-function runYtDlp(id) {
+function listArgs(target) {
+  return [
+    '--ignore-config',
+    '--force-ipv4',
+    '--js-runtimes',
+    'node',
+    // Only list the entries; don't look up every video.
+    '--flat-playlist',
+    '--playlist-items',
+    `1:${PLAYLIST_LIMIT}`,
+    '--print',
+    '%(.{id,title,channel,uploader,duration,live_status})j',
+    '--',
+    target,
+  ];
+}
+
+function parseVideo(stdout) {
+  let info;
+  try {
+    info = JSON.parse(stdout.trim().split('\n').pop());
+  } catch {
+    info = null;
+  }
+  if (!isHttpUrl(info?.url)) {
+    throw new UserError(`yt-dlp didn't return a playable stream for this video. ${UPDATE_HINT}`);
+  }
+  const hls = /m3u8/.test(String(info.protocol || ''));
+  return {
+    title: typeof info.title === 'string' ? info.title.slice(0, 200) : '',
+    kind: hls ? 'hls' : 'file',
+    // For HLS, the master playlist: every quality plus the separate audio.
+    url: hls && isHttpUrl(info.manifest_url) ? info.manifest_url : info.url,
+    // Some of YouTube's streams only work with the user agent that requested them.
+    userAgent: typeof info.http_headers?.['User-Agent'] === 'string' ? info.http_headers['User-Agent'] : '',
+  };
+}
+
+const HIDDEN_ENTRY = /^\[(private|deleted|unavailable) video\]$/i;
+
+function parseEntries(stdout) {
+  const items = [];
+  const seen = new Set();
+  for (const line of stdout.split('\n')) {
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const id = String(entry?.id ?? '');
+    const title = typeof entry.title === 'string' ? entry.title : '';
+    if (!VIDEO_ID.test(id) || seen.has(id) || HIDDEN_ENTRY.test(title)) continue;
+    seen.add(id);
+    items.push({
+      id,
+      title: title.slice(0, 200) || 'YouTube video',
+      channel: String(entry.channel || entry.uploader || '').slice(0, 100),
+      duration: Number.isFinite(entry.duration) && entry.duration > 0 ? Math.round(entry.duration) : null,
+      live: entry.live_status === 'is_live',
+    });
+  }
+  return items;
+}
+
+/** Run yt-dlp and resolve with what it printed; `what` names the job in the server log. */
+function runYtDlp(args, what) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn, value) => {
@@ -250,7 +398,7 @@ function runYtDlp(id) {
 
     let child;
     try {
-      child = spawn(config.ytDlpPath, ytDlpArgs(id), {
+      child = spawn(config.ytDlpPath, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
@@ -279,30 +427,11 @@ function runYtDlp(id) {
     child.on('error', (error) => finish(reject, spawnError(error)));
     child.on('close', (code) => {
       if (code !== 0) {
-        console.error(`[youtube] yt-dlp failed for ${id}:\n${stderr.trim().split('\n').slice(-5).join('\n')}`);
+        console.error(`[youtube] yt-dlp failed for ${what}:\n${stderr.trim().split('\n').slice(-5).join('\n')}`);
         finish(reject, ytDlpError(stderr));
         return;
       }
-      const line = stdout.trim().split('\n').pop();
-      let info;
-      try {
-        info = JSON.parse(line);
-      } catch {
-        info = null;
-      }
-      if (!isHttpUrl(info?.url)) {
-        finish(reject, new UserError(`yt-dlp didn't return a playable stream for this video. ${UPDATE_HINT}`));
-        return;
-      }
-      const hls = /m3u8/.test(String(info.protocol || ''));
-      finish(resolve, {
-        title: typeof info.title === 'string' ? info.title.slice(0, 200) : '',
-        kind: hls ? 'hls' : 'file',
-        // For HLS, the master playlist: every quality plus the separate audio.
-        url: hls && isHttpUrl(info.manifest_url) ? info.manifest_url : info.url,
-        // Some of YouTube's streams only work with the user agent that requested them.
-        userAgent: typeof info.http_headers?.['User-Agent'] === 'string' ? info.http_headers['User-Agent'] : '',
-      });
+      finish(resolve, stdout);
     });
   });
 }
@@ -310,7 +439,10 @@ function runYtDlp(id) {
 const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//.test(value);
 
 function spawnError(error) {
-  if (error.code === 'ENOENT') return new UserError(`YouTube links need yt-dlp on the computer running the server. ${INSTALL_HINT}`);
+  if (error.code === 'ENOENT') {
+    ytDlpFound = false;
+    return new UserError(`YouTube links need yt-dlp on the computer running the server. ${INSTALL_HINT}`);
+  }
   return new UserError(`Couldn't start yt-dlp (${error.code || error.message}).`);
 }
 

@@ -38,6 +38,8 @@ Point a tunnel or your domain at port 3001 and set the `/` URL mapping to it.
   newer, or Deno (`winget install DenoLand.Deno`).
   If you run npm in VS Code's terminal, restart VS Code after installing. YouTube changes often,
   so if links stop working, update it: `winget upgrade yt-dlp.yt-dlp` (or `yt-dlp -U`).
+  The YouTube tab (in Change video) searches YouTube and lists playlist links. Everyone can pick
+  their own picture quality with the quality button next to the subtitles button.
   YOUTUBE_MAX_HEIGHT (default 1080) caps the quality; lower it to 720 if your upload is slow.
   Set YTDLP_PATH if yt-dlp isn't on your PATH.
 - Library: set MEDIA_DIR in .env. A Library tab lists videos and subtitles from that folder.

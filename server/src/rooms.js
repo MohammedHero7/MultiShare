@@ -13,7 +13,7 @@ import { UserError } from './errors.js';
 import { assertLibraryVideo, libraryEnabled, listLibrary, readLibrarySubtitle, siblingSubtitles } from './library.js';
 import { fetchSubtitleUrl, prettyName, probeUrl, titleFromUrl } from './media.js';
 import { libraryUrl, proxiedUrl } from './signing.js';
-import { loadYouTube, youtubeVideoId } from './youtube.js';
+import { findYouTube, loadYouTube, youtubeAvailable, youtubeVideoId } from './youtube.js';
 
 const rooms = new Map();
 const pendingWatch = new Map(); // userId -> { url, channelId, expires } from the /watch command
@@ -56,6 +56,7 @@ class Room {
       state: this.state(),
       users: this.users(),
       library: libraryEnabled(),
+      youtube: youtubeAvailable(),
       encoding: config.subtitleFallbackEncoding,
       serverTime: Date.now(),
     });
@@ -210,6 +211,18 @@ class Room {
         client.send({ t: 'library', files: await listLibrary() });
         return undefined;
       }
+      case 'ytfind': {
+        // One search at a time per person: each one runs yt-dlp.
+        if (client.finding) throw new UserError('Still searching. Wait for the results first.');
+        const query = String(message.q ?? '').slice(0, 300);
+        client.finding = true;
+        try {
+          client.send({ t: 'ytresults', q: query, items: await findYouTube(query) });
+        } finally {
+          client.finding = false;
+        }
+        return undefined;
+      }
       default:
         return undefined;
     }
@@ -257,6 +270,7 @@ class Client {
     this.user = null;
     this.room = null;
     this.joining = false;
+    this.finding = false;
     this.windowStart = Date.now();
     this.windowCount = 0;
 

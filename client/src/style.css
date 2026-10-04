@@ -367,6 +367,31 @@ svg {
   pointer-events: none;
 }
 
+/* Text button showing the current quality ("Auto", "720p"). */
+.quality-btn {
+  flex: none;
+  min-width: 50px;
+  height: 30px;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px solid rgb(246 234 219 / 0.35);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.quality-btn:hover {
+  border-color: var(--paper);
+  background: rgb(246 234 219 / 0.12);
+}
+
 .volume {
   display: flex;
   align-items: center;
@@ -951,8 +976,172 @@ svg {
   color: var(--paper);
 }
 
-.tabpanel[data-panel='library'] {
+.tabpanel[data-panel='library'],
+.tabpanel[data-panel='youtube'] {
   padding-top: 14px;
+}
+
+/* The change-video sheet is wider so YouTube results have room. */
+#sheet-video .sheet__panel {
+  width: min(640px, 100%);
+}
+
+.sheet--narrow .sheet__panel {
+  width: min(360px, 100%);
+}
+
+/* ---------- YouTube results ---------- */
+
+.video-list {
+  display: grid;
+  gap: 2px;
+  max-height: min(52vh, 460px);
+  margin: 12px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.video-list:empty {
+  display: none;
+}
+
+.video-row {
+  display: grid;
+  grid-template-columns: 144px 1fr;
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  text-align: start;
+}
+
+.video-row:hover:not(:disabled) {
+  background: var(--velvet-900);
+}
+
+.video-row:disabled {
+  cursor: progress;
+}
+
+.video-row:disabled:not(.is-loading) {
+  opacity: 0.55;
+}
+
+.video-row__thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--velvet-800);
+}
+
+.video-row__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-row.is-loading .video-row__thumb::after {
+  content: 'Opening…';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.65);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.video-row__badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.82);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-row__badge.is-live {
+  background: var(--alert);
+  color: var(--ink);
+}
+
+.video-row__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 2px;
+  /* Arabic and English titles line up on the same edge; dir="auto" keeps each one's word order. */
+  text-align: left;
+}
+
+.video-row__title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.video-row__channel {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--paper-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+  .video-row {
+    grid-template-columns: 112px 1fr;
+  }
+}
+
+/* ---------- Single-choice list (quality) ---------- */
+
+.choice-list {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+}
+
+.choice-list__item:hover {
+  background: var(--velvet-900);
+}
+
+.choice-list__item[aria-checked='true'] {
+  color: var(--tungsten);
+  font-weight: 600;
+}
+
+.choice-list__item[aria-checked='true']::after {
+  content: '✓';
 }
 
 .file-list {

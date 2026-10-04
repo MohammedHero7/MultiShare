@@ -13,8 +13,9 @@ import * as ui from './ui.js';
 
 const { $ } = ui;
 
-// Big Buck Bunny (CC BY 3.0, Blender Foundation): a handy test file.
-const SAMPLE_URL = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+// Big Buck Bunny (CC BY 3.0, Blender Foundation), the official upload on YouTube.
+// Google's old direct test file now answers 403, so the sample needs YouTube support.
+const SAMPLE_URL = 'https://www.youtube.com/watch?v=aqz-KE-bpKQ';
 
 const appEl = $('app');
 const video = $('video');
@@ -26,7 +27,9 @@ let me = null;
 let users = [];
 let serverState = null;
 let libraryEnabled = false;
+let youtubeEnabled = false;
 let libraryFiles = null;
+let ytPending = null; // the YouTube search waiting for results
 let subtitleEncoding = 'windows-1256';
 let pendingLoad = null;
 let pendingSubs = null;
@@ -59,6 +62,7 @@ async function boot() {
     .on('presence', onPresence)
     .on('subs', onSubs)
     .on('library', onLibrary)
+    .on('ytresults', onYtResults)
     .on('error', onServerError)
     .on('fatal', (message) => ui.showSplash("Can't join the watch party", message.message, { retry: true, waiting: false }))
     .on('status', (status) => ui.setStatus(status === 'reconnecting' ? 'Reconnecting…' : ''));
@@ -79,9 +83,9 @@ function onWelcome(message) {
   me = message.you;
   users = message.users;
   libraryEnabled = message.library;
+  youtubeEnabled = Boolean(message.youtube);
   subtitleEncoding = message.encoding || subtitleEncoding;
-  $('video-tabs').hidden = !libraryEnabled;
-  $('empty-library').hidden = !libraryEnabled;
+  renderSources();
   ui.hideSplash();
   ui.renderViewers(users, me.id);
   renderPeople();
@@ -165,6 +169,11 @@ function onLibrary(message) {
 }
 
 function onServerError(message) {
+  if (message.context === 'ytfind') {
+    finishSearch();
+    ui.setFieldError('yt-error', message.message);
+    return;
+  }
   if (message.context === 'load' && pendingLoad) {
     const { error } = pendingLoad;
     finishLoad({ keepInput: true });
@@ -182,7 +191,7 @@ function onServerError(message) {
 
 /* ---------- Loading videos ---------- */
 
-function requestLoad(payload, { button = null, input = null, error = null } = {}) {
+function requestLoad(payload, { button = null, input = null, error = null, card = null } = {}) {
   if (pendingLoad || !conn) return;
   if ('url' in payload) {
     const url = payload.url.trim();
@@ -195,15 +204,17 @@ function requestLoad(payload, { button = null, input = null, error = null } = {}
     if (error) ui.setFieldError(error, 'Not connected right now. Try again in a moment.');
     return;
   }
-  pendingLoad = { button, input, error };
+  pendingLoad = { button, input, error, card };
   if (button) ui.setBusy(button, true, 'Checking link…');
+  if (card) setCardBusy(card, true);
 }
 
 function finishLoad({ keepInput = false } = {}) {
   if (!pendingLoad) return;
-  const { button, input, error } = pendingLoad;
+  const { button, input, error, card } = pendingLoad;
   pendingLoad = null;
   if (button) ui.setBusy(button, false);
+  if (card) setCardBusy(card, false);
   if (error) ui.setFieldError(error, '');
   if (input && !keepInput) input.value = '';
   if (!keepInput && ui.isSheetOpen('sheet-video')) ui.closeSheet();
@@ -227,28 +238,133 @@ $('empty-sample').addEventListener('click', () => {
   $('empty-load').click();
 });
 $('empty-library').addEventListener('click', () => openVideoSheet('library'));
+$('empty-youtube').addEventListener('click', () => openVideoSheet('youtube'));
 $('btn-change').addEventListener('click', () => openVideoSheet('link'));
 $('notice-change').addEventListener('click', () => openVideoSheet('link'));
 $('splash-retry').addEventListener('click', () => location.reload());
 
+/* The places a video can come from: a link, YouTube, or the library folder. */
+function renderSources() {
+  $('tab-youtube').hidden = !youtubeEnabled;
+  $('tab-library').hidden = !libraryEnabled;
+  $('video-tabs').hidden = !youtubeEnabled && !libraryEnabled;
+  $('empty-youtube').hidden = !youtubeEnabled;
+  $('empty-library').hidden = !libraryEnabled;
+  $('empty-sample').hidden = !youtubeEnabled;
+}
+
 function openVideoSheet(tab) {
-  const target = libraryEnabled ? tab : 'link';
+  const available = { link: true, youtube: youtubeEnabled, library: libraryEnabled };
+  const target = available[tab] ? tab : 'link';
   ui.selectTab('sheet-video', target);
   ui.openSheet('sheet-video');
   if (target === 'library') requestLibrary();
 }
 
+const TAB_FOCUS = { link: 'sheet-url', youtube: 'yt-query', library: 'library-search' };
+
 for (const tab of document.querySelectorAll('#video-tabs [role=tab]')) {
   tab.addEventListener('click', () => {
     ui.selectTab('sheet-video', tab.dataset.tab);
-    if (tab.dataset.tab === 'library') {
-      requestLibrary();
-      $('library-search').focus();
-    } else {
-      $('sheet-url').focus();
-    }
+    if (tab.dataset.tab === 'library') requestLibrary();
+    $(TAB_FOCUS[tab.dataset.tab]).focus();
   });
 }
+
+/* ---------- YouTube tab ---------- */
+
+function searchYouTube() {
+  const input = $('yt-query');
+  const text = input.value.trim();
+  ui.setFieldError('yt-error', '');
+  if (!text) {
+    ui.setFieldError('yt-error', 'Type what you want to watch, or paste a YouTube link.');
+    return;
+  }
+  // A link to a single video loads straight away; playlist links list their videos.
+  if (/^https?:\/\//i.test(text) && !/[?&]list=/.test(text)) {
+    requestLoad({ url: text }, { button: $('yt-search'), input, error: 'yt-error' });
+    return;
+  }
+  if (ytPending || !conn) return;
+  if (!conn.send({ t: 'ytfind', q: text })) {
+    ui.setFieldError('yt-error', 'Not connected right now. Try again in a moment.');
+    return;
+  }
+  ytPending = text;
+  ui.setBusy($('yt-search'), true, 'Searching…');
+  $('yt-status').textContent = '';
+}
+
+function finishSearch() {
+  if (!ytPending) return;
+  ytPending = null;
+  ui.setBusy($('yt-search'), false);
+}
+
+function onYtResults(message) {
+  finishSearch();
+  const items = Array.isArray(message.items) ? message.items : [];
+  $('yt-results').replaceChildren(...items.map(videoRow));
+  $('yt-results').scrollTop = 0;
+  $('yt-status').textContent = items.length ? '' : 'No videos found. Try other words.';
+}
+
+function videoRow(item) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'video-row';
+
+  const thumb = document.createElement('span');
+  thumb.className = 'video-row__thumb';
+  const image = document.createElement('img');
+  image.src = `/.proxy/api/ytthumb?v=${encodeURIComponent(item.id)}`;
+  image.alt = '';
+  image.loading = 'lazy';
+  image.decoding = 'async';
+  image.addEventListener('error', () => image.remove(), { once: true });
+  thumb.append(image);
+  if (item.live || item.duration) {
+    const badge = document.createElement('span');
+    badge.className = item.live ? 'video-row__badge is-live' : 'video-row__badge';
+    badge.textContent = item.live ? 'Live' : formatTime(item.duration);
+    thumb.append(badge);
+  }
+
+  const text = document.createElement('span');
+  text.className = 'video-row__text';
+  const title = document.createElement('span');
+  title.className = 'video-row__title';
+  title.dir = 'auto';
+  title.textContent = item.title;
+  text.append(title);
+  if (item.channel) {
+    const channel = document.createElement('span');
+    channel.className = 'video-row__channel';
+    channel.dir = 'auto';
+    channel.textContent = item.channel;
+    text.append(channel);
+  }
+
+  button.append(thumb, text);
+  button.addEventListener('click', () =>
+    requestLoad({ url: `https://www.youtube.com/watch?v=${item.id}` }, { card: button, error: 'yt-error' }),
+  );
+  const row = document.createElement('li');
+  row.append(button);
+  return row;
+}
+
+function setCardBusy(card, busy) {
+  card.classList.toggle('is-loading', busy);
+  for (const other of $('yt-results').querySelectorAll('.video-row')) other.disabled = busy;
+}
+
+$('yt-search').addEventListener('click', searchYouTube);
+$('yt-query').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') searchYouTube();
+});
+$('yt-query').addEventListener('input', () => ui.setFieldError('yt-error', ''));
 
 function requestLibrary() {
   if (!libraryEnabled || !conn) return;
@@ -487,6 +603,64 @@ document.addEventListener('fullscreenchange', () => {
   const active = Boolean(document.fullscreenElement);
   setIcon($('btn-fullscreen'), active ? 'fullscreen-exit' : 'fullscreen');
   $('btn-fullscreen').setAttribute('aria-label', active ? 'Exit full screen' : 'Full screen');
+});
+
+/* Quality is per person: each viewer's connection is different. */
+const QUALITY_KEY = 'watch-party-quality';
+try {
+  player.preferredHeight = Number(localStorage.getItem(QUALITY_KEY)) || 0;
+} catch {
+  // storage can be unavailable inside some embeds
+}
+
+function renderQuality() {
+  const button = $('btn-quality');
+  const available = player.qualities().length > 0;
+  button.hidden = !available;
+  if (!available) return;
+  // Show what the viewer picked, like YouTube does; the switch itself takes a few seconds.
+  const chosen = player.qualityAuto ? null : player.qualityForHeight(player.preferredHeight);
+  button.textContent = chosen ? `${chosen.height}p` : 'Auto';
+  if (ui.isSheetOpen('sheet-quality')) renderQualityList();
+}
+
+function renderQualityList() {
+  const playing = player.playingHeight;
+  const choices = [
+    { height: 0, label: playing ? `Auto (${playing}p now)` : 'Auto' },
+    ...player.qualities().map(({ height }) => ({ height, label: `${height}p` })),
+  ];
+  const selected = player.qualityAuto ? 0 : (player.qualityForHeight(player.preferredHeight)?.height ?? 0);
+  $('quality-list').replaceChildren(
+    ...choices.map(({ height, label }) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'choice-list__item';
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', String(height === selected));
+      button.textContent = label;
+      button.addEventListener('click', () => {
+        player.setQuality(height);
+        try {
+          localStorage.setItem(QUALITY_KEY, String(height));
+        } catch {
+          // ignore
+        }
+        ui.closeSheet();
+        renderQuality();
+      });
+      const item = document.createElement('li');
+      item.append(button);
+      return item;
+    }),
+  );
+}
+
+player.on('levels', renderQuality);
+player.on('loading', renderQuality);
+$('btn-quality').addEventListener('click', () => {
+  renderQualityList();
+  ui.openSheet('sheet-quality');
 });
 
 /* Autoplay fallbacks */
