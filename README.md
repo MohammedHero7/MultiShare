@@ -34,7 +34,8 @@ Point a tunnel or your domain at port 3001 and set the `/` URL mapping to it.
 ## Optional
 - YouTube: install yt-dlp on the computer running the server: `winget install yt-dlp.yt-dlp`,
   then open a new terminal and run `npm run dev` again. The server prints `YouTube links: on`
-  when it finds it. yt-dlp uses your Node.js (version 22 or newer) to get past YouTube's checks.
+  when it finds it. yt-dlp needs a JavaScript runtime to get past YouTube's checks: Node.js 22 or
+  newer, or Deno (`winget install DenoLand.Deno`).
   If you run npm in VS Code's terminal, restart VS Code after installing. YouTube changes often,
   so if links stop working, update it: `winget upgrade yt-dlp.yt-dlp` (or `yt-dlp -U`).
   YOUTUBE_MAX_HEIGHT (default 1080) caps the quality; lower it to 720 if your upload is slow.

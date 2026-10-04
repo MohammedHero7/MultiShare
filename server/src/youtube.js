@@ -8,7 +8,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { config } from './config.js';
 import { UserError } from './errors.js';
-import { request } from './safe-http.js';
+import { rewritePlaylist } from './media.js';
+import { decodedStream, readBody, request } from './safe-http.js';
 import { proxiedUrl, verifyYouTube, youtubeUrl } from './signing.js';
 
 const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com)$/i;
@@ -18,6 +19,8 @@ const CACHE_MS = 3 * 60 * 60 * 1000; // stream URLs last about 6 hours
 const RESOLVE_TIMEOUT_MS = 60_000;
 const INSTALL_HINT = 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.';
 const UPDATE_HINT = 'Updating yt-dlp often fixes this: run "yt-dlp -U" or "winget upgrade yt-dlp.yt-dlp".';
+const JS_RUNTIME_HINT =
+  'yt-dlp needs a JavaScript runtime to get past YouTube\'s checks. Install Deno ("winget install DenoLand.Deno") or Node.js 22 or newer, then restart npm run dev in a new terminal.';
 // Each yt-dlp run is a Python process plus a Node process, so only a few run at
 // once and a short queue waits; anything beyond that is turned away.
 const MAX_RUNS = 2;
@@ -61,14 +64,13 @@ export async function loadYouTube(id) {
     cache.delete(id);
     throw new UserError(`YouTube refused to stream this video to the server (HTTP ${status}). ${UPDATE_HINT}`);
   }
-  return {
-    title: info.title || 'YouTube video',
-    kind: /m3u8/.test(info.protocol) ? 'hls' : 'file',
-    src: youtubeUrl(id),
-  };
+  return { title: info.title || 'YouTube video', kind: info.kind, src: youtubeUrl(id) };
 }
 
-/** GET /api/youtube?v=<id>&s=<signature> sends the player on to a current stream URL. */
+/**
+ * GET /api/youtube?v=<id>&s=<signature> serves a current stream: the HLS master
+ * playlist (rewritten to go through /api/media), or a redirect to the MP4.
+ */
 export async function handleYouTube(req, res) {
   const id = req.query.v;
   if (!verifyYouTube(id, req.query.s)) {
@@ -78,10 +80,58 @@ export async function handleYouTube(req, res) {
   try {
     const info = await resolveYouTube(id);
     res.set('cache-control', 'no-store');
-    res.redirect(302, proxiedUrl(info.url, info.userAgent));
+    if (info.kind === 'hls') {
+      res.type('application/vnd.apple.mpegurl').send(await masterPlaylist(info));
+    } else {
+      res.redirect(302, proxiedUrl(info.url, info.userAgent));
+    }
   } catch (error) {
+    cache.delete(id); // look the video up again on the next request
     res.status(502).type('text').send(error.expose ? error.message : 'Could not get this video from YouTube.');
   }
+}
+
+/** YouTube's master playlist without qualities above YOUTUBE_MAX_HEIGHT, pointed at our proxy. */
+async function masterPlaylist(info) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const headers = info.userAgent ? { 'user-agent': info.userAgent } : {};
+    const upstream = await request(info.url, { headers, signal: controller.signal });
+    if (upstream.statusCode >= 400) {
+      upstream.resume();
+      throw new UserError(`YouTube refused the video playlist (HTTP ${upstream.statusCode}). Load the video again.`);
+    }
+    const text = (await readBody(decodedStream(upstream), 4 * 1024 * 1024)).toString('utf8');
+    return rewritePlaylist(limitHeight(text, config.youtubeMaxHeight), upstream.finalUrl, info.userAgent);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Drop variants taller than maxHeight from a master playlist, unless that would drop them all. */
+export function limitHeight(text, maxHeight) {
+  const kept = [];
+  let variants = 0;
+  let dropped = 0;
+  let skipUri = false;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#EXT-X-STREAM-INF:')) {
+      variants += 1;
+      const height = Number(/RESOLUTION=\d+x(\d+)/i.exec(trimmed)?.[1]);
+      if (height > maxHeight) {
+        dropped += 1;
+        skipUri = true;
+        continue;
+      }
+    } else if (skipUri && trimmed && !trimmed.startsWith('#')) {
+      skipUri = false;
+      continue;
+    }
+    kept.push(line);
+  }
+  return dropped > 0 && dropped < variants ? kept.join('\n') : text;
 }
 
 /** Log at startup whether YouTube links will work, so a missing yt-dlp shows up early. */
@@ -96,7 +146,7 @@ export function logYouTubeSupport() {
       // yt-dlp only uses Node 22 or newer to solve YouTube's JavaScript checks.
       if (Number(process.versions.node.split('.')[0]) < 22) {
         console.warn(
-          `  ! yt-dlp needs Node.js 22 or newer for YouTube (this is ${process.version}). Install the current LTS: winget install OpenJS.NodeJS.LTS`,
+          `  ! yt-dlp can only use Node.js 22 or newer for YouTube (this is ${process.version}). Install Deno (winget install DenoLand.Deno) or the current Node LTS (winget install OpenJS.NodeJS.LTS).`,
         );
       }
     }
@@ -174,13 +224,15 @@ function ytDlpArgs(id) {
     // yt-dlp needs a JavaScript runtime for YouTube; Node is already installed.
     '--js-runtimes',
     'node',
-    // One file with both picture and sound: HLS (up to 1080p) when offered, else MP4.
+    // HLS when offered: YouTube usually keeps its sound in separate audio
+    // playlists, so a video-only HLS format is fine; its master playlist (used
+    // below) carries the audio. Otherwise one MP4 with both picture and sound.
     '-f',
-    'best[protocol^=m3u8]/best',
+    'best[protocol^=m3u8]/bestvideo[protocol^=m3u8]/best',
     '-S',
     `res:${config.youtubeMaxHeight},vcodec:h264`,
     '--print',
-    '%(.{title,url,protocol,http_headers})j',
+    '%(.{title,url,manifest_url,protocol,http_headers})j',
     '--',
     `https://www.youtube.com/watch?v=${id}`,
   ];
@@ -238,20 +290,24 @@ function runYtDlp(id) {
       } catch {
         info = null;
       }
-      if (typeof info?.url !== 'string' || !/^https?:\/\//.test(info.url)) {
+      if (!isHttpUrl(info?.url)) {
         finish(reject, new UserError(`yt-dlp didn't return a playable stream for this video. ${UPDATE_HINT}`));
         return;
       }
+      const hls = /m3u8/.test(String(info.protocol || ''));
       finish(resolve, {
         title: typeof info.title === 'string' ? info.title.slice(0, 200) : '',
-        url: info.url,
-        protocol: String(info.protocol || ''),
+        kind: hls ? 'hls' : 'file',
+        // For HLS, the master playlist: every quality plus the separate audio.
+        url: hls && isHttpUrl(info.manifest_url) ? info.manifest_url : info.url,
         // Some of YouTube's streams only work with the user agent that requested them.
         userAgent: typeof info.http_headers?.['User-Agent'] === 'string' ? info.http_headers['User-Agent'] : '',
       });
     });
   });
 }
+
+const isHttpUrl = (value) => typeof value === 'string' && /^https?:\/\//.test(value);
 
 function spawnError(error) {
   if (error.code === 'ENOENT') return new UserError(`YouTube links need yt-dlp on the computer running the server. ${INSTALL_HINT}`);
@@ -266,7 +322,6 @@ const YT_DLP_ERRORS = [
   [/members.only|join this channel/i, 'This video is only for channel members.'],
   [/premieres in|live event will begin|this live event/i, "This video hasn't started yet."],
   [/not available in your country|blocked it in your country/i, "This video isn't available in your country."],
-  [/requested format is not available/i, `YouTube didn't offer a version of this video that can play here. ${UPDATE_HINT}`],
   [/video unavailable|has been removed|account .* terminated|no longer available/i, 'This video is unavailable.'],
 ];
 
@@ -275,6 +330,14 @@ function ytDlpError(stderr) {
   const errors = stderr.split('\n').filter((line) => line.startsWith('ERROR:')).join('\n') || stderr;
   for (const [pattern, message] of YT_DLP_ERRORS) {
     if (pattern.test(errors)) return new UserError(message);
+  }
+  // Without a JavaScript runtime yt-dlp skips most of YouTube's formats; it
+  // only warns about that before failing, so look at the whole output.
+  if (/no supported javascript runtime|ignoring unsupported javascript runtime|challenge solving failed/i.test(stderr)) {
+    return new UserError(JS_RUNTIME_HINT);
+  }
+  if (/requested format is not available/i.test(errors)) {
+    return new UserError(`YouTube didn't offer a version of this video that can play here. ${UPDATE_HINT}`);
   }
   return new UserError(`YouTube wouldn't give the server this video. ${UPDATE_HINT}`);
 }
