@@ -13,6 +13,7 @@ import { UserError } from './errors.js';
 import { assertLibraryVideo, libraryEnabled, listLibrary, readLibrarySubtitle, siblingSubtitles } from './library.js';
 import { fetchSubtitleUrl, prettyName, probeUrl, titleFromUrl } from './media.js';
 import { libraryUrl, proxiedUrl } from './signing.js';
+import { loadYouTube, youtubeVideoId } from './youtube.js';
 
 const rooms = new Map();
 const pendingWatch = new Map(); // userId -> { url, channelId, expires } from the /watch command
@@ -96,7 +97,7 @@ class Room {
         kind: this.media.kind,
         src: this.media.src,
         source: this.media.source,
-        link: this.media.source === 'url' ? this.media.url : null,
+        link: this.media.url ?? null,
         path: this.media.source === 'library' ? this.media.path : null,
       },
       paused: this.paused,
@@ -121,10 +122,13 @@ class Room {
   async load(source, by) {
     const ticket = ++this.loadSeq;
     let media;
+    const youtubeId = source.path ? null : youtubeVideoId(source.url);
     if (source.path) {
       await assertLibraryVideo(source.path);
       const name = source.path.split('/').pop();
       media = { source: 'library', path: source.path, title: prettyName(name), kind: 'file', src: libraryUrl(source.path) };
+    } else if (youtubeId) {
+      media = { source: 'youtube', url: `https://www.youtube.com/watch?v=${youtubeId}`, ...(await loadYouTube(youtubeId)) };
     } else {
       const probe = await probeUrl(source.url);
       media = {

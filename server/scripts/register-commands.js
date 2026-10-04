@@ -33,7 +33,7 @@ const command = {
     {
       type: 3,
       name: 'url',
-      description: 'Direct link to a video (.mp4, .webm or .m3u8)',
+      description: 'YouTube link or direct link to a video (.mp4, .webm or .m3u8)',
       required: true,
     },
   ],

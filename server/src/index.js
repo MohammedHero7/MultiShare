@@ -8,6 +8,7 @@ import { handleInteraction } from './interactions.js';
 import { handleFile } from './library.js';
 import { handleMedia } from './media.js';
 import { attachSockets } from './rooms.js';
+import { handleYouTube, logYouTubeSupport } from './youtube.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -37,6 +38,7 @@ app.post('/api/token', express.json({ limit: '10kb' }), async (req, res) => {
 
 app.get('/api/media', handleMedia);
 app.get('/api/file', handleFile);
+app.get('/api/youtube', handleYouTube);
 
 // In production the server also serves the built activity (client/dist).
 const indexHtml = path.join(config.clientDist, 'index.html');
@@ -66,4 +68,5 @@ server.listen(config.port, () => {
   if (config.mediaDir) console.log(`  Library folder: ${config.mediaDir}`);
   if (config.publicKey) console.log('  /watch command endpoint: /api/interactions');
   if (config.allowGuests) console.log('  Browser testing is ON (ALLOW_GUESTS=true). Turn it off when deployed.');
+  logYouTubeSupport();
 });
