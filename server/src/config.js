@@ -31,6 +31,8 @@ export const config = {
   allowGuests: flag('ALLOW_GUESTS'),
   allowPrivateUrls: flag('ALLOW_PRIVATE_URLS'),
   subtitleFallbackEncoding: pickEncoding(env('SUBTITLE_FALLBACK_ENCODING', 'windows-1256') || 'windows-1256'),
+  ytDlpPath: env('YTDLP_PATH') || 'yt-dlp',
+  youtubeMaxHeight: Math.max(144, Number.parseInt(env('YOUTUBE_MAX_HEIGHT'), 10) || 1080),
   signingSecret: env('MEDIA_SIGNING_SECRET') || crypto.randomBytes(32).toString('hex'),
   clientDist: path.join(ROOT_DIR, 'client', 'dist'),
 };

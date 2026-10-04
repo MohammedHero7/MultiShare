@@ -38,7 +38,8 @@ const isPlaylistResponse = (type, url) => /mpegurl/i.test(type) || /\.m3u8?$/i.t
  */
 export async function handleMedia(req, res) {
   const target = req.query.u;
-  if (!verifyProxied(target, req.query.s)) {
+  const userAgent = req.query.a ?? '';
+  if (!verifyProxied(target, userAgent, req.query.s)) {
     res.status(403).type('text').send('This media link is invalid. Load the video again.');
     return;
   }
@@ -53,6 +54,7 @@ export async function handleMedia(req, res) {
   try {
     const headers = {};
     if (req.headers.range) headers.range = req.headers.range;
+    if (userAgent) headers['user-agent'] = userAgent;
     upstream = await request(target, { headers, signal: controller.signal });
   } catch (error) {
     if (controller.signal.aborted) return;
@@ -66,7 +68,7 @@ export async function handleMedia(req, res) {
     try {
       const body = (await readBody(decodedStream(upstream), 8 * 1024 * 1024)).toString('utf8');
       res.status(200).set({ 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'no-cache' });
-      res.send(body.trimStart().startsWith('#EXTM3U') ? rewritePlaylist(body, upstream.finalUrl) : body);
+      res.send(body.trimStart().startsWith('#EXTM3U') ? rewritePlaylist(body, upstream.finalUrl, userAgent) : body);
     } catch {
       if (!res.headersSent) res.status(502).type('text').send('Could not read the playlist.');
     }
@@ -88,12 +90,12 @@ export async function handleMedia(req, res) {
 }
 
 /** Point every URI in an HLS playlist (segments, variants, keys, init maps) at our proxy. */
-export function rewritePlaylist(text, baseUrl) {
+export function rewritePlaylist(text, baseUrl, userAgent = '') {
   const rewrite = (uri) => {
     try {
       const absolute = new URL(uri.trim(), baseUrl);
       if (absolute.protocol !== 'http:' && absolute.protocol !== 'https:') return null;
-      return proxiedUrl(absolute.href);
+      return proxiedUrl(absolute.href, userAgent);
     } catch {
       return null;
     }
@@ -122,7 +124,8 @@ const DRM_HOSTS = /(^|\.)(netflix\.com|disneyplus\.com|primevideo\.com|max\.com|
 export async function probeUrl(raw) {
   const url = parseUserUrl(raw);
   if (NOT_DIRECT_HOSTS.test(url.hostname)) {
-    throw new UserError("YouTube links aren't video files. Use Discord's built-in Watch Together activity for YouTube.");
+    // Video links are handled by youtube.js before this; anything left is a channel, playlist or search page.
+    throw new UserError("That YouTube link isn't a single video. Open the video and copy its link from Share.");
   }
   if (DRM_HOSTS.test(url.hostname)) {
     throw new UserError("Streaming services protect their videos with DRM, so they can't play here.");

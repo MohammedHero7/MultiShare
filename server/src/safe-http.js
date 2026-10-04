@@ -86,6 +86,10 @@ export function parseUserUrl(raw) {
   return url;
 }
 
+// YouTube stream URLs only work from the IP address that asked for them. yt-dlp
+// runs with --force-ipv4, so requests to YouTube have to use IPv4 too.
+const IPV4_ONLY_HOSTS = /(^|\.)(googlevideo\.com|youtube\.com)$/i;
+
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 
@@ -114,6 +118,7 @@ export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}
           headers: { 'user-agent': BROWSER_UA, accept: '*/*', ...headers },
           agent: agents[url.protocol],
           lookup: guardedLookup,
+          family: IPV4_ONLY_HOSTS.test(url.hostname) ? 4 : undefined,
           signal,
         },
         (res) => {
