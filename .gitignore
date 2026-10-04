@@ -1,0 +1,21 @@
+# Secrets: keep these on your machine only. .env.example is the shared template.
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Client build output (npm run build)
+client/dist/
+
+# Logs
+npm-debug.log*
+*.log
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
