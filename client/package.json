@@ -1,0 +1,20 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
+    "@fontsource-variable/readex-pro": "^5.3.0",
+    "@fontsource/big-shoulders-display": "^5.3.0",
+    "hls.js": "^1.7.3"
+  },
+  "devDependencies": {
+    "vite": "^8.3.2"
+  }
+}

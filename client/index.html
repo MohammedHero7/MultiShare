@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Watch party</title>
+  </head>
+  <body>
+    <div class="app" id="app" data-media="none">
+      <main class="stage" id="stage">
+        <video class="stage__video" id="video" playsinline preload="auto"></video>
+        <div class="subtitles" id="subtitles"></div>
+
+        <section class="empty" id="empty" hidden>
+          <h1 class="empty__title">What are we watching?</h1>
+          <p class="empty__lead">Paste a link to a video file. It opens for everyone here, paused at the start.</p>
+          <div class="field-row">
+            <input class="input" id="empty-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+              placeholder="https://example.com/movie.mp4" aria-label="Video link" />
+            <button class="btn btn--primary" id="empty-load" type="button">Load for everyone</button>
+          </div>
+          <p class="field-error" id="empty-error" role="alert"></p>
+          <p class="empty__hint">Works with .mp4, .webm and .m3u8 links.</p>
+          <div class="empty__more">
+            <button class="btn btn--text" id="empty-library" type="button" hidden>Browse the library</button>
+            <button class="btn btn--text" id="empty-sample" type="button">Try a sample video</button>
+          </div>
+          <p class="empty__people" id="empty-people"></p>
+        </section>
+
+        <div class="leader" id="leader" hidden aria-hidden="true">
+          <svg viewBox="0 0 120 120" class="leader__svg">
+            <circle class="leader__ring" cx="60" cy="60" r="56" />
+            <circle class="leader__ring leader__ring--inner" cx="60" cy="60" r="44" />
+            <line class="leader__cross" x1="60" y1="0" x2="60" y2="120" />
+            <line class="leader__cross" x1="0" y1="60" x2="120" y2="60" />
+          </svg>
+          <div class="leader__sweep"></div>
+          <div class="leader__hand"></div>
+        </div>
+
+        <div class="notice" id="notice" hidden role="alert">
+          <p class="notice__text" id="notice-text"></p>
+          <button class="btn btn--primary" id="notice-change" type="button">Change video</button>
+        </div>
+
+        <div class="gate" id="gate" hidden>
+          <button class="gate__button" id="gate-button" type="button" aria-describedby="gate-text">
+            <span class="gate__icon" data-icon="play"></span>
+            <span>Join playback</span>
+          </button>
+          <p class="gate__text" id="gate-text">Tap once so your browser can play the video.</p>
+        </div>
+
+        <button class="pill pill--accent unmute" id="unmute" type="button" hidden>
+          <span data-icon="volume"></span>
+          Tap to turn on sound
+        </button>
+
+        <div class="splash" id="splash">
+          <p class="splash__title" id="splash-title">Connecting to Discord…</p>
+          <p class="splash__text" id="splash-text"></p>
+          <button class="btn btn--primary" id="splash-retry" type="button" hidden>Try again</button>
+        </div>
+      </main>
+
+      <header class="topbar" id="topbar">
+        <h2 class="topbar__title" id="title"></h2>
+        <div class="viewers" id="viewers"></div>
+        <button class="icon-btn" id="btn-change" type="button" aria-label="Change video" title="Change video">
+          <span data-icon="film"></span>
+        </button>
+      </header>
+
+      <footer class="controls" id="controls">
+        <div class="seek" id="seek">
+          <div class="seek__track">
+            <div class="seek__buffered" id="seek-buffered"></div>
+            <div class="seek__played" id="seek-played"></div>
+          </div>
+          <div class="seek__thumb" id="seek-thumb"></div>
+          <div class="seek__tip" id="seek-tip" hidden></div>
+          <input class="seek__input" id="seek-input" type="range" min="0" max="1000" step="1" value="0"
+            aria-label="Seek" />
+        </div>
+        <div class="controls__row">
+          <button class="icon-btn icon-btn--play" id="btn-play" type="button" aria-label="Play">
+            <span data-icon="play"></span>
+          </button>
+          <span class="time" id="time">0:00</span>
+          <span class="controls__spacer"></span>
+          <button class="icon-btn" id="btn-subs" type="button" aria-label="Subtitles" title="Subtitles (C)">
+            <span data-icon="subtitles"></span>
+          </button>
+          <div class="volume">
+            <button class="icon-btn" id="btn-mute" type="button" aria-label="Mute" title="Mute (M)">
+              <span data-icon="volume"></span>
+            </button>
+            <input class="volume__slider" id="volume" type="range" min="0" max="1" step="0.05" value="1"
+              aria-label="Volume" />
+          </div>
+          <button class="icon-btn" id="btn-fullscreen" type="button" aria-label="Full screen" title="Full screen (F)">
+            <span data-icon="fullscreen"></span>
+          </button>
+        </div>
+      </footer>
+
+      <div class="toasts" id="toasts" aria-live="polite"></div>
+      <div class="pill status" id="status" hidden></div>
+
+      <div class="sheet" id="sheet-video" hidden>
+        <div class="sheet__backdrop" data-close></div>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-video-title">
+          <header class="sheet__head">
+            <h3 class="sheet__title" id="sheet-video-title">Change video</h3>
+            <button class="icon-btn" type="button" data-close aria-label="Close"><span data-icon="close"></span></button>
+          </header>
+          <div class="tabs" id="video-tabs" role="tablist" hidden>
+            <button class="tab" role="tab" type="button" data-tab="link" aria-selected="true">Link</button>
+            <button class="tab" role="tab" type="button" data-tab="library" aria-selected="false">Library</button>
+          </div>
+          <div class="tabpanel" data-panel="link">
+            <label class="label" for="sheet-url">Video link</label>
+            <div class="field-row">
+              <input class="input" id="sheet-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+                placeholder="https://example.com/movie.mp4" />
+              <button class="btn btn--primary" id="sheet-load" type="button">Load for everyone</button>
+            </div>
+            <p class="field-error" id="sheet-error" role="alert"></p>
+            <p class="hint">The video opens paused for everyone. Direct links ending in .mp4, .webm or .m3u8 work best.</p>
+          </div>
+          <div class="tabpanel" data-panel="library" hidden>
+            <input class="input" id="library-search" type="search" placeholder="Search the library" aria-label="Search the library" />
+            <ul class="file-list" id="library-list"></ul>
+            <p class="hint" id="library-status"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet" id="sheet-subs" hidden>
+        <div class="sheet__backdrop" data-close></div>
+        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-subs-title">
+          <header class="sheet__head">
+            <h3 class="sheet__title" id="sheet-subs-title">Subtitles</h3>
+            <button class="icon-btn" type="button" data-close aria-label="Close"><span data-icon="close"></span></button>
+          </header>
+
+          <div class="subs-current">
+            <div>
+              <p class="subs-current__name" id="subs-name">No subtitles</p>
+              <p class="hint">Subtitles you add appear for everyone.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="subs-visible" checked />
+              <span class="switch__track"></span>
+              <span class="switch__label">Show</span>
+            </label>
+          </div>
+
+          <label class="label" for="subs-url">Add from a link</label>
+          <div class="field-row">
+            <input class="input" id="subs-url" type="url" autocomplete="off" spellcheck="false"
+              placeholder="https://example.com/movie.srt" />
+            <button class="btn btn--secondary" id="subs-add" type="button">Add</button>
+          </div>
+          <div class="subs-actions">
+            <button class="btn btn--secondary" id="subs-upload" type="button">
+              <span data-icon="upload"></span> Upload .srt or .vtt
+            </button>
+            <input id="subs-file" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" hidden />
+            <button class="btn btn--text" id="subs-remove" type="button" hidden>Remove for everyone</button>
+          </div>
+          <p class="field-error" id="subs-error" role="alert"></p>
+
+          <div id="subs-library" hidden>
+            <p class="label">From the library</p>
+            <ul class="file-list file-list--short" id="subs-library-list"></ul>
+          </div>
+
+          <div class="delay">
+            <div>
+              <p class="label">Timing on your screen</p>
+              <p class="delay__value" id="subs-delay">Matches the video</p>
+            </div>
+            <div class="delay__buttons">
+              <button class="btn btn--secondary" id="subs-earlier" type="button" aria-label="Show subtitles half a second earlier">−0.5 s</button>
+              <button class="btn btn--secondary" id="subs-later" type="button" aria-label="Show subtitles half a second later">+0.5 s</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

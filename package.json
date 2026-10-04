@@ -1,0 +1,23 @@
+{
+  "name": "discord-watch-party",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Discord Activity that plays a video in sync for everyone in a voice channel.",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c magenta,cyan \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm start -w server",
+    "register": "npm run register -w server",
+    "tunnel": "cloudflared tunnel --url http://localhost:5173"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

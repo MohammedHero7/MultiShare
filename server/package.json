@@ -1,0 +1,16 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "register": "node scripts/register-commands.js"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "express": "^4.22.3",
+    "ws": "^8.22.0"
+  }
+}
