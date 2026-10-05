@@ -1777,3 +1777,62 @@ svg {
     grid-column: auto;
   }
 }
+
+
+.anime-sites {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.anime-site {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--velvet-800);
+  border-radius: 12px;
+  background: var(--velvet-900);
+}
+
+.anime-site__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--velvet-800);
+  color: var(--tungsten);
+  font-weight: 800;
+}
+
+.anime-site__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.anime-site__body h5 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.anime-site__body p {
+  margin: 3px 0 0;
+  color: var(--paper-muted);
+  font-size: 12px;
+}
+
+.anime-site--share {
+  border-color: var(--velvet-600);
+}
+
+@media (max-width: 560px) {
+  .anime-site {
+    flex-wrap: wrap;
+  }
+
+  .anime-site .btn {
+    width: 100%;
+  }
+}
