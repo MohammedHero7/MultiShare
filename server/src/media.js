@@ -131,6 +131,12 @@ export async function probeUrl(raw) {
     throw new UserError("Streaming services protect their videos with DRM, so they can't play here.");
   }
 
+  // Share4Max publishes playable pages under /iframe/<id>. These are not raw
+  // video files, so keep the URL as an iframe instead of probing it as HTML.
+  if (/^(?:www\\.)?share4max\\.net$/i.test(url.hostname) && /^\\/iframe\\/[^/]+/i.test(url.pathname)) {
+    return { kind: 'iframe', finalUrl: url.href };
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   let res;
