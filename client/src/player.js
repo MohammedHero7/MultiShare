@@ -17,8 +17,9 @@ const SOFT_DRIFT = 0.2; // seconds off before we start nudging the rate
 const SETTLED = 0.06; // close enough to stop nudging
 
 export class Player {
-  constructor(video, serverNow) {
+  constructor(video, serverNow, iframe = null) {
     this.video = video;
+    this.iframe = iframe;
     this.serverNow = serverNow;
     this.state = null;
     this.src = null;
@@ -97,7 +98,28 @@ export class Player {
     if (!media) {
       video.removeAttribute('src');
       video.load();
+      if (this.iframe) {
+        this.iframe.hidden = true;
+        this.iframe.removeAttribute('src');
+      }
       return;
+    }
+
+    if (media.kind === 'iframe') {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      if (this.iframe) {
+        this.iframe.src = media.src;
+        this.iframe.hidden = false;
+      }
+      this.emit('loaded');
+      return;
+    }
+
+    if (this.iframe) {
+      this.iframe.hidden = true;
+      this.iframe.removeAttribute('src');
     }
 
     this.emit('loading');
@@ -178,7 +200,8 @@ export class Player {
   sync(force) {
     const state = this.state;
     const video = this.video;
-    if (!state?.media || video.readyState < HAVE_METADATA) return;
+    if (!state?.media || state.media.kind === 'iframe') return;
+    if (video.readyState < HAVE_METADATA) return;
 
     const target = this.expectedTime();
     const duration = this.duration;
@@ -204,7 +227,7 @@ export class Player {
   correctDrift() {
     const state = this.state;
     const video = this.video;
-    if (!state?.media || video.readyState < HAVE_METADATA) return;
+    if (!state?.media || state.media.kind === 'iframe' || video.readyState < HAVE_METADATA) return;
     if (state.paused) {
       this.sync(false);
       return;
