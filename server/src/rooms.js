@@ -13,13 +13,14 @@ import { UserError } from './errors.js';
 import { assertLibraryVideo, libraryEnabled, listLibrary, readLibrarySubtitle, siblingSubtitles } from './library.js';
 import { fetchSubtitleUrl, prettyName, probeUrl, titleFromUrl } from './media.js';
 import { libraryUrl, proxiedUrl } from './signing.js';
-import { loadYouTube, youtubeVideoId } from './youtube.js';
+import { browseYouTube, loadYouTube, youtubeVideoId } from './youtube.js';
 
 const rooms = new Map();
 const pendingWatch = new Map(); // userId -> { url, channelId, expires } from the /watch command
 
 const ROOM_TTL_MS = 10 * 60 * 1000;
 const MAX_SUBTITLE_CHARS = 3_000_000;
+const MAX_RECENT = 24;
 
 const cleanPosition = (value) => {
   const number = Number(value);
@@ -41,6 +42,7 @@ class Room {
     this.seq = 0;
     this.loadSeq = 0;
     this.youtubeLoading = false;
+    this.recent = []; // YouTube videos played here, newest first, for the YouTube tab
     this.expiry = null;
   }
 
@@ -100,6 +102,8 @@ class Room {
         source: this.media.source,
         link: this.media.url ?? null,
         path: this.media.source === 'library' ? this.media.path : null,
+        channel: this.media.channel || null,
+        poster: this.media.poster ?? null,
       },
       paused: this.paused,
       position: this.position,
@@ -135,7 +139,12 @@ class Room {
     } else if (youtubeId) {
       this.youtubeLoading = true;
       try {
-        media = { source: 'youtube', url: `https://www.youtube.com/watch?v=${youtubeId}`, ...(await loadYouTube(youtubeId)) };
+        media = {
+          source: 'youtube',
+          videoId: youtubeId,
+          url: `https://www.youtube.com/watch?v=${youtubeId}`,
+          ...(await loadYouTube(youtubeId)),
+        };
       } finally {
         this.youtubeLoading = false;
       }
@@ -156,6 +165,10 @@ class Room {
     this.position = 0;
     this.updatedAt = Date.now();
     this.subs = null;
+    if (media.source === 'youtube') {
+      const item = { id: media.videoId, title: media.title, channel: media.channel, duration: media.duration };
+      this.recent = [item, ...this.recent.filter((entry) => entry.id !== item.id)].slice(0, MAX_RECENT);
+    }
     this.broadcast({ t: 'subs', subs: null });
     this.publish('load', by);
 
@@ -210,6 +223,22 @@ class Room {
         client.send({ t: 'library', files: await listLibrary() });
         return undefined;
       }
+      case 'youtube': {
+        // An empty query asks for what this room has played.
+        const query = typeof message.q === 'string' ? message.q.trim() : '';
+        if (!query) {
+          client.send({ t: 'youtube', kind: 'recent', q: '', title: '', channel: '', items: this.recent });
+          return undefined;
+        }
+        if (client.browsing) throw new UserError('Still searching. Wait for those results first.');
+        client.browsing = true;
+        try {
+          client.send({ t: 'youtube', q: query, ...(await browseYouTube(query)) });
+        } finally {
+          client.browsing = false;
+        }
+        return undefined;
+      }
       default:
         return undefined;
     }
@@ -257,6 +286,7 @@ class Client {
     this.user = null;
     this.room = null;
     this.joining = false;
+    this.browsing = false; // one YouTube search at a time per person
     this.windowStart = Date.now();
     this.windowCount = 0;
 

@@ -4,18 +4,30 @@
 // YouTube stream URLs expire after a few hours and only work from the IP address
 // that asked for them. So the activity gets a stable /api/youtube link that
 // re-resolves when needed, and yt-dlp and the proxy both stick to IPv4.
+//
+// yt-dlp also powers the YouTube tab: searches, playlists and channel pages are
+// listed with --flat-playlist, which reads YouTube's listing without resolving
+// every video.
 
 import { execFile, spawn } from 'node:child_process';
+import { pipeline } from 'node:stream';
 import { config } from './config.js';
 import { UserError } from './errors.js';
-import { request } from './safe-http.js';
+import { rewritePlaylist } from './media.js';
+import { decodedStream, readBody, request } from './safe-http.js';
 import { proxiedUrl, verifyYouTube, youtubeUrl } from './signing.js';
 
 const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtube-nocookie\.com)$/i;
 const SHORT_HOSTS = /^(www\.)?youtu\.be$/i;
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+const LIST_ID = /^[A-Za-z0-9_-]{10,64}$/;
+const CHANNEL_TABS = new Set(['videos', 'shorts', 'streams']);
 const CACHE_MS = 3 * 60 * 60 * 1000; // stream URLs last about 6 hours
 const RESOLVE_TIMEOUT_MS = 60_000;
+const BROWSE_TIMEOUT_MS = 30_000;
+const BROWSE_CACHE_MS = 10 * 60 * 1000;
+const SEARCH_RESULTS = 24;
+const LIST_RESULTS = 60;
 const INSTALL_HINT = 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.';
 const UPDATE_HINT = 'Updating yt-dlp often fixes this: run "yt-dlp -U" or "winget upgrade yt-dlp.yt-dlp".';
 // Each yt-dlp run is a Python process plus a Node process, so only a few run at
@@ -24,6 +36,7 @@ const MAX_RUNS = 2;
 const MAX_QUEUED = 6;
 
 const cache = new Map(); // video id -> { at, promise }
+const browseCache = new Map(); // yt-dlp target -> { at, promise }
 const waiting = []; // start functions for runs waiting for a free slot
 let running = 0;
 
@@ -63,9 +76,162 @@ export async function loadYouTube(id) {
   }
   return {
     title: info.title || 'YouTube video',
+    channel: info.channel,
+    duration: info.duration,
     kind: /m3u8/.test(info.protocol) ? 'hls' : 'file',
     src: youtubeUrl(id),
+    poster: thumbnailUrl(id, 'poster'),
   };
+}
+
+/** Thumbnails also come through the server: Discord activities can't load images from other sites. */
+export const thumbnailUrl = (id, size = 'card') =>
+  `/.proxy/api/thumb?v=${encodeURIComponent(id)}${size === 'poster' ? '&size=poster' : ''}`;
+
+/**
+ * Search YouTube, or list a playlist or a channel's videos, for the YouTube tab.
+ * Resolves to { kind: 'search' | 'list', title, channel, items }.
+ */
+export async function browseYouTube(raw) {
+  const query = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!query) throw new UserError('Type something to search for.');
+  const search = !/^https?:\/\//i.test(query);
+  const target = search ? `ytsearch${SEARCH_RESULTS}:${query.toLowerCase()}` : listUrl(query);
+
+  for (const [key, entry] of browseCache) {
+    if (Date.now() - entry.at >= BROWSE_CACHE_MS || browseCache.size > 200) browseCache.delete(key);
+  }
+  const cached = browseCache.get(target);
+  if (cached) return cached.promise;
+
+  const entry = {
+    at: Date.now(),
+    promise: withRunSlot(() => runYtDlp(browseArgs(target), { label: target, timeoutMs: BROWSE_TIMEOUT_MS })).then(
+      (stdout) => parseListing(stdout, search),
+    ),
+  };
+  browseCache.set(target, entry);
+  entry.promise.catch(() => {
+    if (browseCache.get(target) === entry) browseCache.delete(target);
+  });
+  return entry.promise;
+}
+
+/** The yt-dlp target for a playlist or channel link. Mixes (list=RD…) can't be listed. */
+function listUrl(raw) {
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new UserError("That doesn't look like a valid link.");
+  }
+  if (!YOUTUBE_HOSTS.test(url.hostname)) {
+    throw new UserError('Paste a YouTube playlist or channel link, or type words to search.');
+  }
+  const list = url.searchParams.get('list');
+  if (list && LIST_ID.test(list) && !list.startsWith('RD')) return `https://www.youtube.com/playlist?list=${list}`;
+
+  // pathname is still percent-encoded, so a segment can't smuggle in "/", "?" or "#".
+  const [first = '', second, third] = url.pathname.split('/').filter(Boolean);
+  let channel = null;
+  let tab = null;
+  if (first.startsWith('@') && first.length > 1) {
+    [channel, tab] = [first, second];
+  } else if (['channel', 'c', 'user'].includes(first) && second) {
+    [channel, tab] = [`${first}/${second}`, third];
+  }
+  if (channel) return `https://www.youtube.com/${channel}/${CHANNEL_TABS.has(tab) ? tab : 'videos'}`;
+  throw new UserError("That link isn't a playlist or a channel. Paste video links in the Link tab.");
+}
+
+function browseArgs(target) {
+  return [
+    '--ignore-config',
+    '--flat-playlist',
+    '--dump-single-json',
+    '--playlist-items',
+    `1:${LIST_RESULTS}`,
+    '--js-runtimes',
+    'node',
+    '--',
+    target,
+  ];
+}
+
+const UNAVAILABLE_TITLE = /^\[(private|deleted) video\]$/i;
+const cleanText = (value) => (typeof value === 'string' ? value.trim().slice(0, 200) : '');
+const cleanCount = (value) => (Number.isFinite(value) && value >= 0 ? value : null);
+
+function parseListing(stdout, search) {
+  let data;
+  try {
+    data = JSON.parse(stdout);
+  } catch {
+    data = null;
+  }
+  if (!Array.isArray(data?.entries)) throw new UserError(`yt-dlp didn't return a list of videos. ${UPDATE_HINT}`);
+
+  // Channel pages leave the channel off each video, so fall back to the list's own.
+  const listChannel = cleanText(data.channel || data.uploader);
+  const seen = new Set();
+  const items = [];
+  for (const entry of data.entries) {
+    const id = entry?.id;
+    if (typeof id !== 'string' || !VIDEO_ID.test(id) || seen.has(id)) continue;
+    if (entry._type === 'playlist' || entry.live_status === 'is_upcoming' || UNAVAILABLE_TITLE.test(entry.title)) continue;
+    seen.add(id);
+    items.push({
+      id,
+      title: cleanText(entry.title) || 'YouTube video',
+      channel: cleanText(entry.channel || entry.uploader) || listChannel,
+      duration: cleanCount(entry.duration),
+      views: cleanCount(entry.view_count),
+      uploaded: cleanCount(entry.timestamp), // seconds; YouTube only says "3 years ago", so it's approximate
+      live: entry.live_status === 'is_live',
+    });
+  }
+  return {
+    kind: search ? 'search' : 'list',
+    title: search ? '' : cleanText(data.title),
+    channel: search ? '' : listChannel,
+    items,
+  };
+}
+
+const THUMBNAILS = { card: ['mqdefault'], poster: ['maxresdefault', 'hqdefault'] };
+
+/**
+ * GET /api/thumb?v=<id>[&size=poster] streams a YouTube thumbnail. It only ever
+ * fetches i.ytimg.com for a well-formed video id, so it needs no signature.
+ */
+export async function handleThumbnail(req, res) {
+  const id = req.query.v;
+  if (typeof id !== 'string' || !VIDEO_ID.test(id)) {
+    res.status(404).end();
+    return;
+  }
+  const controller = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished) controller.abort();
+  });
+
+  // Not every video has a full-HD thumbnail; i.ytimg.com answers 404 for those.
+  for (const name of req.query.size === 'poster' ? THUMBNAILS.poster : THUMBNAILS.card) {
+    let upstream;
+    try {
+      upstream = await request(`https://i.ytimg.com/vi/${id}/${name}.jpg`, { signal: controller.signal, timeoutMs: 10000 });
+    } catch {
+      break;
+    }
+    if (upstream.statusCode === 200) {
+      res.set({ 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' });
+      if (upstream.headers['content-length']) res.set('content-length', upstream.headers['content-length']);
+      pipeline(upstream, res, () => {});
+      return;
+    }
+    upstream.destroy();
+  }
+  if (!res.headersSent && !controller.signal.aborted) res.status(404).end();
 }
 
 /** GET /api/youtube?v=<id>&s=<signature> sends the player on to a current stream URL. */
@@ -78,10 +244,40 @@ export async function handleYouTube(req, res) {
   try {
     const info = await resolveYouTube(id);
     res.set('cache-control', 'no-store');
-    res.redirect(302, proxiedUrl(info.url, info.userAgent));
+    if (!info.master) {
+      res.redirect(302, proxiedUrl(info.url, info.userAgent));
+      return;
+    }
+    // YouTube's master playlist offers every size it has, so serve it here without
+    // the ones above YOUTUBE_MAX_HEIGHT. Its parts still go through /api/media.
+    const upstream = await request(info.url, info.userAgent ? { headers: { 'user-agent': info.userAgent } } : {});
+    if (upstream.statusCode >= 400) {
+      upstream.resume();
+      throw new UserError(`YouTube refused the video's playlist (HTTP ${upstream.statusCode}). Load the video again.`);
+    }
+    const text = (await readBody(decodedStream(upstream), 2 * 1024 * 1024)).toString('utf8');
+    res.type('application/vnd.apple.mpegurl');
+    res.send(rewritePlaylist(capVariants(text, config.youtubeMaxHeight), upstream.finalUrl, info.userAgent));
   } catch (error) {
-    res.status(502).type('text').send(error.expose ? error.message : 'Could not get this video from YouTube.');
+    if (!res.headersSent) res.status(502).type('text').send(error.expose ? error.message : 'Could not get this video from YouTube.');
   }
+}
+
+/** Drop the variants of an HLS master playlist that are taller than maxHeight. */
+function capVariants(text, maxHeight) {
+  const lines = text.split(/\r?\n/);
+  const kept = [];
+  let variants = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const height = Number(/^#EXT-X-STREAM-INF:.*RESOLUTION=\d+x(\d+)/.exec(lines[i])?.[1]);
+    if (height > maxHeight) {
+      i += 1; // and the variant's URI on the next line
+      continue;
+    }
+    if (lines[i].startsWith('#EXT-X-STREAM-INF:')) variants += 1;
+    kept.push(lines[i]);
+  }
+  return variants > 0 ? kept.join('\n') : text;
 }
 
 /** Log at startup whether YouTube links will work, so a missing yt-dlp shows up early. */
@@ -118,7 +314,7 @@ function resolveYouTube(id, { fresh = false } = {}) {
   for (const [key, entry] of cache) {
     if (Date.now() - entry.at >= CACHE_MS) cache.delete(key);
   }
-  const entry = { at: Date.now(), promise: withRunSlot(() => runYtDlp(id)) };
+  const entry = { at: Date.now(), promise: withRunSlot(() => fetchStream(id)) };
   cache.set(id, entry);
   entry.promise.catch(() => {
     if (cache.get(id) === entry) cache.delete(id);
@@ -175,18 +371,47 @@ function ytDlpArgs(id) {
     '--js-runtimes',
     'node',
     // One file with both picture and sound: HLS (up to 1080p) when offered, else MP4.
+    // YouTube often offers picture and sound only separately now; then any HLS
+    // video will do, because its master playlist (manifest_url) pairs them.
     '-f',
-    'best[protocol^=m3u8]/best',
+    'best[protocol^=m3u8]/best/bv*[protocol^=m3u8]',
     '-S',
     `res:${config.youtubeMaxHeight},vcodec:h264`,
     '--print',
-    '%(.{title,url,protocol,http_headers})j',
+    '%(.{title,channel,uploader,duration,url,manifest_url,acodec,protocol,http_headers})j',
     '--',
     `https://www.youtube.com/watch?v=${id}`,
   ];
 }
 
-function runYtDlp(id) {
+async function fetchStream(id) {
+  const stdout = await runYtDlp(ytDlpArgs(id), { label: id, timeoutMs: RESOLVE_TIMEOUT_MS });
+  const line = stdout.trim().split('\n').pop();
+  let info;
+  try {
+    info = JSON.parse(line);
+  } catch {
+    info = null;
+  }
+  if (typeof info?.url !== 'string' || !/^https?:\/\//.test(info.url)) {
+    throw new UserError(`yt-dlp didn't return a playable stream for this video. ${UPDATE_HINT}`);
+  }
+  const protocol = String(info.protocol || '');
+  const master = info.acodec === 'none' && /m3u8/.test(protocol) && /^https?:\/\//.test(info.manifest_url ?? '');
+  return {
+    title: cleanText(info.title),
+    channel: cleanText(info.channel || info.uploader),
+    duration: cleanCount(info.duration),
+    url: master ? info.manifest_url : info.url,
+    master, // a master playlist that pairs picture-only streams with sound
+    protocol,
+    // Some of YouTube's streams only work with the user agent that requested them.
+    userAgent: typeof info.http_headers?.['User-Agent'] === 'string' ? info.http_headers['User-Agent'] : '',
+  };
+}
+
+/** Run yt-dlp and resolve with what it printed; failures become messages people can act on. */
+function runYtDlp(args, { label, timeoutMs }) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (fn, value) => {
@@ -198,7 +423,7 @@ function runYtDlp(id) {
 
     let child;
     try {
-      child = spawn(config.ytDlpPath, ytDlpArgs(id), {
+      child = spawn(config.ytDlpPath, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
@@ -213,7 +438,7 @@ function runYtDlp(id) {
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk) => {
-      if (stdout.length < 1_000_000) stdout += chunk;
+      if (stdout.length < 4_000_000) stdout += chunk;
     });
     child.stderr.on('data', (chunk) => {
       if (stderr.length < 100_000) stderr += chunk;
@@ -222,33 +447,16 @@ function runYtDlp(id) {
     const timer = setTimeout(() => {
       child.kill();
       finish(reject, new UserError('YouTube took too long to answer. Try again in a moment.'));
-    }, RESOLVE_TIMEOUT_MS);
+    }, timeoutMs);
 
     child.on('error', (error) => finish(reject, spawnError(error)));
     child.on('close', (code) => {
       if (code !== 0) {
-        console.error(`[youtube] yt-dlp failed for ${id}:\n${stderr.trim().split('\n').slice(-5).join('\n')}`);
+        console.error(`[youtube] yt-dlp failed for ${label}:\n${stderr.trim().split('\n').slice(-5).join('\n')}`);
         finish(reject, ytDlpError(stderr));
         return;
       }
-      const line = stdout.trim().split('\n').pop();
-      let info;
-      try {
-        info = JSON.parse(line);
-      } catch {
-        info = null;
-      }
-      if (typeof info?.url !== 'string' || !/^https?:\/\//.test(info.url)) {
-        finish(reject, new UserError(`yt-dlp didn't return a playable stream for this video. ${UPDATE_HINT}`));
-        return;
-      }
-      finish(resolve, {
-        title: typeof info.title === 'string' ? info.title.slice(0, 200) : '',
-        url: info.url,
-        protocol: String(info.protocol || ''),
-        // Some of YouTube's streams only work with the user agent that requested them.
-        userAgent: typeof info.http_headers?.['User-Agent'] === 'string' ? info.http_headers['User-Agent'] : '',
-      });
+      finish(resolve, stdout);
     });
   });
 }
@@ -268,6 +476,7 @@ const YT_DLP_ERRORS = [
   [/not available in your country|blocked it in your country/i, "This video isn't available in your country."],
   [/requested format is not available/i, `YouTube didn't offer a version of this video that can play here. ${UPDATE_HINT}`],
   [/video unavailable|has been removed|account .* terminated|no longer available/i, 'This video is unavailable.'],
+  [/does not exist|HTTP Error 40[04]|does not have an? \w+ tab/i, "YouTube couldn't find that playlist or channel. It may be private or deleted."],
 ];
 
 function ytDlpError(stderr) {
