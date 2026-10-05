@@ -35,7 +35,7 @@ let noticeShown = false;
 let bufferingSince = 0;
 let subDelay = 0;
 
-const player = new Player(video, () => (conn ? conn.serverNow() : Date.now()));
+const player = new Player(video, () => (conn ? conn.serverNow() : Date.now()), $('media-iframe'));
 const subtitles = new SubtitleRenderer($('subtitles'), video);
 
 hydrateIcons();
