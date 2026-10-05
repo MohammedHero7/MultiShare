@@ -1678,167 +1678,36 @@ svg {
 }
 
 
-/* ---------- Anime3rb / AdGuard DNS section ---------- */
 
-.anime-panel {
-  width: min(720px, 100%);
-  pointer-events: auto;
-}
-
-.anime-panel a,
-.anime-panel button {
-  pointer-events: auto;
-}
-
-.anime-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin-top: 10px;
-  padding: 20px;
-  border: 1px solid var(--velvet-600);
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at 100% 0, rgb(255 181 71 / 0.12), transparent 42%),
-    var(--velvet-900);
-}
-
-.anime-hero__eyebrow {
-  margin: 0 0 5px;
-  color: var(--tungsten);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.anime-hero h4 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 28px;
-  line-height: 1;
-}
-
-.anime-hero p:last-child {
-  max-width: 58ch;
-  margin: 9px 0 0;
-  color: var(--paper-muted);
-}
-
-.dns-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.dns-card {
-  display: grid;
-  gap: 7px;
-  padding: 15px;
-  border: 1px solid var(--velvet-800);
-  border-radius: 12px;
-  background: var(--velvet-900);
-}
-
-.dns-card--wide {
-  grid-column: 1 / -1;
-}
-
-.dns-card__title {
-  margin: 0;
-  font-weight: 600;
-}
-
-.dns-card code {
-  display: block;
-  overflow-x: auto;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--velvet-950);
-  color: var(--paper);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.dns-note {
-  margin: 14px 0 0;
-  color: var(--paper-muted);
-  font-size: 12px;
-}
-
-@media (max-width: 560px) {
-  .anime-hero {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .dns-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dns-card--wide {
-    grid-column: auto;
-  }
-}
-
-
-.anime-sites {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
+/* ---------- Anime tab ---------- */
+.anime-tabpanel { padding-top: 14px; }
+.anime-sites { display: grid; gap: 10px; }
 .anime-site {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 13px;
-  border: 1px solid var(--velvet-800);
-  border-radius: 12px;
-  background: var(--velvet-900);
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 13px; border: 1px solid var(--velvet-800); border-radius: 12px;
+  background: var(--velvet-900); color: inherit; text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s;
 }
-
+.anime-site:hover { border-color: var(--velvet-600); background: var(--velvet-800); }
 .anime-site__icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: 10px;
-  background: var(--velvet-800);
-  color: var(--tungsten);
-  font-weight: 800;
+  display: grid; place-items: center; width: 44px; height: 44px; flex: none;
+  border-radius: 10px; background: var(--velvet-800); color: var(--tungsten); font-weight: 800;
 }
-
-.anime-site__body {
-  min-width: 0;
-  flex: 1;
-}
-
-.anime-site__body h5 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.anime-site__body p {
-  margin: 3px 0 0;
-  color: var(--paper-muted);
-  font-size: 12px;
-}
-
-.anime-site--share {
-  border-color: var(--velvet-600);
-}
-
+.anime-site__body { display: grid; min-width: 0; flex: 1; gap: 3px; }
+.anime-site__body strong { font-size: 15px; }
+.anime-site__body span { color: var(--paper-muted); font-size: 12px; }
+.anime-site .btn { flex: none; pointer-events: none; }
+.anime-dns { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--velvet-800); }
+.anime-dns h4 { margin: 0; font-family: var(--font-display); font-size: 22px; }
+.anime-dns > p { margin: 5px 0 0; color: var(--paper-muted); font-size: 12.5px; }
+.dns-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.dns-card { display: grid; gap: 7px; padding: 13px; border: 1px solid var(--velvet-800); border-radius: 12px; background: var(--velvet-900); }
+.dns-card--wide { grid-column: 1 / -1; }
+.dns-card__title { margin: 0; font-weight: 600; }
+.dns-card code { display: block; overflow-x: auto; padding: 7px 9px; border-radius: 8px; background: var(--velvet-950); color: var(--paper); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; white-space: nowrap; }
 @media (max-width: 560px) {
-  .anime-site {
-    flex-wrap: wrap;
-  }
-
-  .anime-site .btn {
-    width: 100%;
-  }
+  .anime-site { flex-wrap: wrap; }
+  .anime-site .btn { width: 100%; }
+  .dns-grid { grid-template-columns: 1fr; }
+  .dns-card--wide { grid-column: auto; }
 }
