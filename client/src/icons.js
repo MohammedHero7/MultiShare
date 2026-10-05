@@ -13,6 +13,11 @@ const ICONS = {
   film: stroke('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7.5 4v16"/><path d="M16.5 4v16"/><path d="M3 9h4.5"/><path d="M3 15h4.5"/><path d="M16.5 9H21"/><path d="M16.5 15H21"/>'),
   close: stroke('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
   upload: stroke('<path d="M12 15.5V4"/><path d="M7.5 8.5L12 4l4.5 4.5"/><path d="M5 19.5h14"/>'),
+  link: stroke('<path d="M10 14a4.2 4.2 0 0 0 6 0l3.2-3.2a4.2 4.2 0 0 0-6-6L12 6"/><path d="M14 10a4.2 4.2 0 0 0-6 0l-3.2 3.2a4.2 4.2 0 0 0 6 6L12 18"/>'),
+  folder: stroke('<path d="M3.5 7.5a2 2 0 0 1 2-2h3.8l2.2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>'),
+  search: stroke('<circle cx="10.8" cy="10.8" r="6.3"/><path d="M15.5 15.5l4.5 4.5"/>'),
+  youtube:
+    '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M21.6 7.4a2.6 2.6 0 0 0-1.8-1.9C18.2 5 12 5 12 5s-6.2 0-7.8.5a2.6 2.6 0 0 0-1.8 1.9C2 9 2 12 2 12s0 3 .4 4.6a2.6 2.6 0 0 0 1.8 1.9C5.8 19 12 19 12 19s6.2 0 7.8-.5a2.6 2.6 0 0 0 1.8-1.9C22 15 22 12 22 12s0-3-.4-4.6zM10 15.1V8.9l5.3 3.1z"/></svg>',
 };
 
 export function icon(name) {

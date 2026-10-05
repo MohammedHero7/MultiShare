@@ -2,6 +2,8 @@
   Projection booth: a true-black screen, aubergine "velvet" surfaces, and one
   tungsten-bulb accent. Big Shoulders Display (marquee signage) for titles,
   Readex Pro (Arabic + Latin in one family) for everything people read.
+  YouTube red appears only on the YouTube mark and its "Live" badge, so the
+  source is recognisable at a glance.
 */
 
 :root {
@@ -16,6 +18,7 @@
   --paper: #f6eadb;
   --paper-muted: #bfa9b9;
   --alert: #ff8f7e;
+  --youtube: #ff3347;
 
   --font-ui: 'Readex Pro Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-display: 'Big Shoulders Display', 'Arial Narrow', 'Roboto Condensed', sans-serif;
@@ -72,6 +75,10 @@ svg {
   display: block;
 }
 
+[data-icon='youtube'] {
+  color: var(--youtube);
+}
+
 /* ---------- Frame ---------- */
 
 .app {
@@ -118,9 +125,12 @@ svg {
   user-select: none;
 }
 
-.topbar__title {
+.topbar__heading {
   flex: 1;
   min-width: 0;
+}
+
+.topbar__title {
   margin: 0;
   overflow: hidden;
   font-family: var(--font-display);
@@ -128,6 +138,33 @@ svg {
   font-weight: 700;
   line-height: 1.05;
   letter-spacing: 0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.topbar__source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--paper-muted);
+}
+
+.topbar__source > span[data-icon] {
+  display: inline-grid;
+  flex: none;
+}
+
+.topbar__source svg {
+  width: 16px;
+  height: 16px;
+}
+
+.topbar__source-text {
+  min-width: 0;
+  overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -533,11 +570,65 @@ svg {
   color: var(--paper-muted);
 }
 
-.empty__more {
+/* Where else a video can come from: one tile per source. */
+.sources {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 22px;
-  margin-top: 16px;
+  align-items: center;
+  gap: 10px 12px;
+  margin-top: 20px;
+}
+
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px 18px 8px 9px;
+  border: 1px solid var(--velvet-600);
+  border-radius: 14px;
+  background: var(--velvet-900);
+  text-align: start;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.source:hover {
+  border-color: var(--paper-muted);
+  background: var(--velvet-800);
+}
+
+.source__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--velvet-800);
+  transition: background-color 0.15s;
+}
+
+.source:hover .source__icon {
+  background: var(--velvet-600);
+}
+
+.source__name {
+  display: block;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.source__desc {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--paper-muted);
+}
+
+.sources .btn--text {
+  margin-left: 6px;
 }
 
 .empty__people {
@@ -937,13 +1028,32 @@ svg {
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 36px;
-  padding: 0 16px;
+  padding: 0 16px 0 12px;
   border: 0;
   border-radius: 8px;
   background: none;
   font-weight: 500;
   color: var(--paper-muted);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.tab:hover {
+  color: var(--paper);
+}
+
+.tab > span[data-icon] {
+  display: inline-grid;
+}
+
+.tab svg {
+  width: 18px;
+  height: 18px;
 }
 
 .tab[aria-selected='true'] {
@@ -953,6 +1063,310 @@ svg {
 
 .tabpanel[data-panel='library'] {
   padding-top: 14px;
+}
+
+/* ---------- YouTube tab ---------- */
+
+/* The video sheet grows into a browser while the YouTube tab is open; only the results scroll. */
+.sheet__panel--video {
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet__panel--video > * {
+  flex: none;
+}
+
+.sheet__panel--video:has(> .yt:not([hidden])) {
+  width: min(1000px, 100%);
+  height: min(780px, calc(100% - 16px));
+  overflow: hidden;
+}
+
+.sheet__panel--video > .yt {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 14px;
+}
+
+.yt__field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.yt__field-icon {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  display: grid;
+  color: var(--paper-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.yt__field-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.yt__input {
+  padding-left: 40px;
+}
+
+.yt__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 12px;
+}
+
+.yt__heading {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.yt__bar .btn--text {
+  flex: none;
+  min-height: 28px;
+  font-size: 13px;
+  color: var(--paper-muted);
+}
+
+.yt__scroll {
+  flex: 1;
+  min-height: 0;
+  margin: 0 -22px -24px;
+  padding: 4px 22px 24px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.yt__status {
+  text-align: center;
+}
+
+.yt__status:empty {
+  display: none;
+}
+
+.yt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: 22px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.yt-card {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  text-align: start;
+  transition: opacity 0.2s;
+}
+
+.yt-card:focus-visible {
+  outline-offset: 4px;
+}
+
+.yt-card__thumb {
+  position: relative;
+  display: block;
+  margin-bottom: 8px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background: var(--velvet-900);
+}
+
+.yt-card__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s var(--ease);
+}
+
+.yt-card:hover .yt-card__thumb img {
+  transform: scale(1.05);
+}
+
+.yt-card.is-current .yt-card__thumb {
+  outline: 2px solid var(--tungsten);
+  outline-offset: 2px;
+}
+
+.yt-card__badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.8);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.yt-card__badge--live {
+  background: var(--youtube);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.yt-card__now {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--tungsten);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.yt-card.is-current .yt-card__now {
+  display: block;
+}
+
+.yt-card__opening {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgb(0 0 0 / 0.68);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.yt-card__opening::before {
+  content: '';
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgb(246 234 219 / 0.25);
+  border-top-color: var(--tungsten);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.yt-card.is-loading .yt-card__opening {
+  display: grid;
+}
+
+.yt-grid.is-busy .yt-card:not(.is-loading) {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.yt-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.38;
+}
+
+.yt-card__meta {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--paper-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.yt-card__meta:empty {
+  display: none;
+}
+
+/* Placeholder cards while YouTube answers. */
+.yt-skeleton {
+  display: grid;
+  gap: 8px;
+}
+
+.yt-skeleton__thumb,
+.yt-skeleton__line {
+  display: block;
+  background: linear-gradient(90deg, var(--velvet-900) 30%, var(--velvet-800) 50%, var(--velvet-900) 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.yt-skeleton__thumb {
+  margin-bottom: 4px;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+}
+
+.yt-skeleton__line {
+  width: 90%;
+  height: 12px;
+  border-radius: 6px;
+}
+
+.yt-skeleton__line--short {
+  width: 55%;
+}
+
+.yt-empty {
+  display: grid;
+  justify-items: center;
+  max-width: 400px;
+  margin: clamp(16px, 7vh, 64px) auto 0;
+  text-align: center;
+}
+
+.yt-empty__icon svg {
+  width: 64px;
+  height: 64px;
+}
+
+.yt-empty__title {
+  margin: 10px 0 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .file-list {
@@ -1126,6 +1540,23 @@ svg {
     padding-bottom: max(24px, env(safe-area-inset-bottom));
     border-radius: 18px 18px 0 0;
   }
+
+  .sheet__panel--video:has(> .yt:not([hidden])) {
+    height: 88%;
+  }
+
+  .tab {
+    padding: 0 12px 0 10px;
+  }
+
+  .yt-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
+    gap: 18px 10px;
+  }
+
+  .source {
+    flex: 1 1 220px;
+  }
 }
 
 /* Phones held upright: video on top, controls underneath and always visible. */
@@ -1205,7 +1636,7 @@ svg {
   .gate__text,
   .empty__lead,
   .empty__hint,
-  .empty__more,
+  .sources,
   .empty__people,
   .empty .field-row,
   .empty .field-error {

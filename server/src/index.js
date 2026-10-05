@@ -60,6 +60,17 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 const server = http.createServer(app);
 attachSockets(server);
 
+// Two copies of the server can't share a port. Without this the second one dies
+// with a stack trace, and the activity just sits on "Connecting…".
+server.on('error', (error) => {
+  if (error.code !== 'EADDRINUSE') throw error;
+  console.error(
+    `\n  ! Port ${config.port} is already in use, probably by another "npm run dev" that is still running.` +
+      `\n    Stop the other one (Ctrl+C in its terminal), or set a different PORT in .env, then start again.\n`,
+  );
+  process.exit(1);
+});
+
 server.listen(config.port, () => {
   console.log(`Watch party server on http://localhost:${config.port}`);
   if (!config.clientId || !config.clientSecret) {
@@ -67,6 +78,7 @@ server.listen(config.port, () => {
   }
   if (fs.existsSync(indexHtml)) console.log('  Serving the built activity from client/dist');
   if (config.mediaDir) console.log(`  Library folder: ${config.mediaDir}`);
+  if (config.dnsServers.length) console.log(`  DNS lookups go through ${config.dnsServers.join(', ')} (DNS_SERVERS)`);
   if (config.publicKey) console.log('  /watch command endpoint: /api/interactions');
   if (config.allowGuests) console.log('  Browser testing is ON (ALLOW_GUESTS=true). Turn it off when deployed.');
   logYouTubeSupport();

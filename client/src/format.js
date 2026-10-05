@@ -17,3 +17,26 @@ export function joinNames(names, max = 2) {
 }
 
 export const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** 36719807 → "36.7M views" */
+export const formatViews = (count) => `${compact.format(count)} ${count === 1 ? 'view' : 'views'}`;
+
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+const AGO_UNITS = [
+  ['year', 365 * 86400],
+  ['month', 30 * 86400],
+  ['week', 7 * 86400],
+  ['day', 86400],
+  ['hour', 3600],
+  ['minute', 60],
+];
+
+/** A Unix time in seconds → "3 years ago" */
+export function formatAgo(seconds) {
+  const elapsed = Date.now() / 1000 - seconds;
+  if (!(elapsed >= 0)) return '';
+  const [unit, size] = AGO_UNITS.find(([, length]) => elapsed >= length) ?? ['minute', 60];
+  return relative.format(-Math.max(1, Math.floor(elapsed / size)), unit);
+}

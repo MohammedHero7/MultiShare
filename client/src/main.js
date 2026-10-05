@@ -4,7 +4,7 @@ import '@fontsource/big-shoulders-display/800';
 import './style.css';
 
 import { Connection } from './connection.js';
-import { clamp, formatTime, joinNames } from './format.js';
+import { clamp, formatAgo, formatTime, formatViews, joinNames } from './format.js';
 import { hydrateIcons, setIcon } from './icons.js';
 import { Player } from './player.js';
 import { isInDiscord, startSession } from './session.js';
@@ -59,9 +59,14 @@ async function boot() {
     .on('presence', onPresence)
     .on('subs', onSubs)
     .on('library', onLibrary)
+    .on('youtube', onYouTube)
     .on('error', onServerError)
     .on('fatal', (message) => ui.showSplash("Can't join the watch party", message.message, { retry: true, waiting: false }))
-    .on('status', (status) => ui.setStatus(status === 'reconnecting' ? 'Reconnecting…' : ''));
+    .on('status', (status) => {
+      ui.setStatus(status === 'reconnecting' ? 'Reconnecting…' : '');
+      // A search in flight is lost with the connection.
+      if (status === 'reconnecting' && youtubePending !== null) failYouTube('The connection dropped. Search again.');
+    });
   conn.connect();
 }
 
@@ -80,7 +85,7 @@ function onWelcome(message) {
   users = message.users;
   libraryEnabled = message.library;
   subtitleEncoding = message.encoding || subtitleEncoding;
-  $('video-tabs').hidden = !libraryEnabled;
+  document.querySelector('#video-tabs [data-tab=library]').hidden = !libraryEnabled;
   $('empty-library').hidden = !libraryEnabled;
   ui.hideSplash();
   ui.renderViewers(users, me.id);
@@ -115,15 +120,48 @@ function applyState(next) {
   $('empty').hidden = Boolean(media);
   $('title').textContent = media?.title ?? '';
   $('title').title = media?.title ?? '';
+  $('sheet-video-title').textContent = media ? 'Change video' : 'Pick a video';
   document.title = media?.title ?? 'Watch party';
   if (media?.src !== previousSrc) {
     hideNotice();
     renderSubsLibrary();
+    renderSource(media);
+    markCurrentYouTube();
+    // YouTube videos show their thumbnail until the picture starts, like on YouTube.
+    if (media?.poster) video.poster = media.poster;
+    else video.removeAttribute('poster');
     if ('mediaSession' in navigator && media && typeof MediaMetadata === 'function') {
-      navigator.mediaSession.metadata = new MediaMetadata({ title: media.title, artist: 'Watch party' });
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: media.title,
+        artist: media.channel || 'Watch party',
+        artwork: media.poster ? [{ src: media.poster, type: 'image/jpeg' }] : [],
+      });
     }
   }
   ui.wake();
+}
+
+/** The line under the title: where the video comes from. */
+function renderSource(media) {
+  $('source').hidden = !media;
+  if (!media) return;
+  let icon = 'link';
+  let text = '';
+  if (media.source === 'youtube') {
+    icon = 'youtube';
+    text = media.channel ? `YouTube · ${media.channel}` : 'YouTube';
+  } else if (media.source === 'library') {
+    icon = 'folder';
+    text = 'Library';
+  } else {
+    try {
+      text = new URL(media.link).hostname.replace(/^www\./, '');
+    } catch {
+      text = 'Link';
+    }
+  }
+  setIcon($('source'), icon);
+  $('source-text').textContent = text;
 }
 
 function onPresence(message) {
@@ -177,12 +215,16 @@ function onServerError(message) {
     ui.setFieldError('subs-error', message.message);
     return;
   }
+  if (message.context === 'youtube' && youtubePending !== null) {
+    failYouTube(message.message);
+    return;
+  }
   ui.toast(message.message, { tone: 'error', duration: 6000 });
 }
 
 /* ---------- Loading videos ---------- */
 
-function requestLoad(payload, { button = null, input = null, error = null } = {}) {
+function requestLoad(payload, { button = null, input = null, error = null, card = null } = {}) {
   if (pendingLoad || !conn) return;
   if ('url' in payload) {
     const url = payload.url.trim();
@@ -195,15 +237,17 @@ function requestLoad(payload, { button = null, input = null, error = null } = {}
     if (error) ui.setFieldError(error, 'Not connected right now. Try again in a moment.');
     return;
   }
-  pendingLoad = { button, input, error };
+  pendingLoad = { button, input, error, card };
   if (button) ui.setBusy(button, true, 'Checking link…');
+  if (card) setCardBusy(card, true);
 }
 
 function finishLoad({ keepInput = false } = {}) {
   if (!pendingLoad) return;
-  const { button, input, error } = pendingLoad;
+  const { button, input, error, card } = pendingLoad;
   pendingLoad = null;
   if (button) ui.setBusy(button, false);
+  if (card) setCardBusy(card, false);
   if (error) ui.setFieldError(error, '');
   if (input && !keepInput) input.value = '';
   if (!keepInput && ui.isSheetOpen('sheet-video')) ui.closeSheet();
@@ -227,27 +271,31 @@ $('empty-sample').addEventListener('click', () => {
   $('empty-load').click();
 });
 $('empty-library').addEventListener('click', () => openVideoSheet('library'));
-$('btn-change').addEventListener('click', () => openVideoSheet('link'));
+$('empty-youtube').addEventListener('click', () => openVideoSheet('youtube'));
+// "Change video" goes back to wherever the current video came from.
+const currentSourceTab = () => ({ youtube: 'youtube', library: 'library' })[serverState?.media?.source] ?? 'link';
+$('btn-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('btn-anime3rb').addEventListener('click', () => ui.openSheet('sheet-anime3rb'));
-$('notice-change').addEventListener('click', () => openVideoSheet('link'));
+$('notice-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('splash-retry').addEventListener('click', () => location.reload());
 
 function openVideoSheet(tab) {
-  const target = libraryEnabled ? tab : 'link';
-  ui.selectTab('sheet-video', target);
+  const target = tab === 'library' && !libraryEnabled ? 'link' : tab;
+  selectVideoTab(target);
   ui.openSheet('sheet-video');
-  if (target === 'library') requestLibrary();
 }
 
+function selectVideoTab(name) {
+  ui.selectTab('sheet-video', name);
+  if (name === 'library') requestLibrary();
+  if (name === 'youtube' && !youtubeView) browseYouTube('');
+}
+
+const TAB_INPUTS = { link: 'sheet-url', library: 'library-search', youtube: 'yt-query' };
 for (const tab of document.querySelectorAll('#video-tabs [role=tab]')) {
   tab.addEventListener('click', () => {
-    ui.selectTab('sheet-video', tab.dataset.tab);
-    if (tab.dataset.tab === 'library') {
-      requestLibrary();
-      $('library-search').focus();
-    } else {
-      $('sheet-url').focus();
-    }
+    selectVideoTab(tab.dataset.tab);
+    $(TAB_INPUTS[tab.dataset.tab]).focus();
   });
 }
 
@@ -296,6 +344,169 @@ function renderLibrary() {
   else if (videos.length === 0) status = query ? 'No videos match that search.' : 'No videos found in the library folder.';
   else if (videos.length > shown.length) status = `Showing ${shown.length} of ${videos.length}. Search to narrow it down.`;
   $('library-status').textContent = status;
+}
+
+/* ---------- YouTube ---------- */
+
+const watchUrl = (id) => `https://www.youtube.com/watch?v=${id}`;
+const thumbnailUrl = (id) => `/.proxy/api/thumb?v=${encodeURIComponent(id)}`;
+// Playlist and channel links open as a list here; any other link loads straight away.
+// Mixes (list=RD…) can't be listed, so those load their video.
+const isListLink = (text) =>
+  /^https?:\/\/([\w-]+\.)?youtube\.com\//i.test(text) &&
+  (/[?&]list=(?!RD)[\w-]{10,}/.test(text) || /youtube\.com\/(@|channel\/|c\/|user\/)/i.test(text));
+
+let youtubePending = null; // the query being looked up ('' asks for what this room played)
+let youtubeView = null; // what the results show: { kind: 'search' | 'list' | 'recent', q, title, channel, items }
+
+function submitYouTube() {
+  if (pendingLoad || youtubePending !== null) return;
+  const text = $('yt-query').value.trim();
+  if (/^https?:\/\//i.test(text) && !isListLink(text)) {
+    requestLoad({ url: text }, { button: $('yt-submit'), input: $('yt-query'), error: 'yt-error' });
+  } else {
+    browseYouTube(text);
+  }
+}
+
+$('yt-submit').addEventListener('click', submitYouTube);
+$('yt-query').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') submitYouTube();
+});
+$('yt-query').addEventListener('input', () => ui.setFieldError('yt-error', ''));
+$('yt-recent').addEventListener('click', () => browseYouTube(''));
+renderYouTube();
+
+function browseYouTube(query) {
+  if (pendingLoad || youtubePending !== null || !conn) return;
+  ui.setFieldError('yt-error', '');
+  if (!conn.send({ t: 'youtube', q: query })) {
+    ui.setFieldError('yt-error', 'Not connected right now. Try again in a moment.');
+    return;
+  }
+  youtubePending = query;
+  if (query) {
+    ui.setBusy($('yt-submit'), true, 'Searching…');
+    renderYouTubeSkeleton(query);
+  }
+}
+
+function finishYouTube() {
+  if (youtubePending) ui.setBusy($('yt-submit'), false);
+  youtubePending = null;
+}
+
+function onYouTube(message) {
+  if (youtubePending === null) return;
+  finishYouTube();
+  youtubeView = message;
+  renderYouTube();
+  $('yt-scroll').scrollTop = 0;
+}
+
+function failYouTube(text) {
+  finishYouTube();
+  renderYouTube(); // put back whatever showed before the search
+  ui.setFieldError('yt-error', text);
+}
+
+function renderYouTube() {
+  const view = youtubeView;
+  const items = view?.items ?? [];
+  $('yt-results').classList.remove('is-skeleton');
+  $('yt-results').setAttribute('aria-busy', 'false');
+  $('yt-results').replaceChildren(...items.map(youtubeCard));
+  markCurrentYouTube();
+
+  let heading = '';
+  if (view?.kind === 'search') heading = `Results for “${view.q}”`;
+  else if (view?.kind === 'list') heading = [view.title || 'Playlist', view.channel].filter(Boolean).join(' · ');
+  else if (items.length) heading = 'Played in this room';
+  $('yt-heading').textContent = heading;
+  $('yt-recent').hidden = !view || view.kind === 'recent';
+
+  $('yt-empty').hidden = Boolean(view && (view.kind !== 'recent' || items.length));
+  let status = '';
+  if (view?.kind === 'search' && !items.length) status = 'No videos found. Try other words.';
+  if (view?.kind === 'list' && !items.length) status = 'There are no videos here that can play.';
+  $('yt-status').textContent = status;
+}
+
+/** Gray placeholder cards while YouTube answers. */
+function renderYouTubeSkeleton(query) {
+  const placeholders = Array.from({ length: 8 }, () => {
+    const item = document.createElement('li');
+    item.className = 'yt-skeleton';
+    item.append(span('yt-skeleton__thumb'), span('yt-skeleton__line'), span('yt-skeleton__line yt-skeleton__line--short'));
+    return item;
+  });
+  $('yt-results').classList.add('is-skeleton');
+  $('yt-results').setAttribute('aria-busy', 'true');
+  $('yt-results').replaceChildren(...placeholders);
+  $('yt-heading').textContent = /^https?:/i.test(query) ? 'Opening the list…' : `Searching for “${query}”…`;
+  $('yt-recent').hidden = true;
+  $('yt-empty').hidden = true;
+  $('yt-status').textContent = '';
+}
+
+function span(className, text = '') {
+  const element = document.createElement('span');
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+
+function youtubeCard(item) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'yt-card';
+  button.dataset.id = item.id;
+  button.title = item.title;
+
+  const thumb = span('yt-card__thumb');
+  const image = document.createElement('img');
+  image.src = thumbnailUrl(item.id);
+  image.alt = '';
+  image.loading = 'lazy';
+  image.decoding = 'async';
+  image.addEventListener('error', () => image.remove(), { once: true });
+  thumb.append(image);
+  const badge = item.live ? 'Live' : item.duration ? formatTime(item.duration) : '';
+  if (badge) thumb.append(span(`yt-card__badge${item.live ? ' yt-card__badge--live' : ''}`, badge));
+  thumb.append(span('yt-card__now', 'Now showing'), span('yt-card__opening', 'Opening for everyone…'));
+
+  const title = span('yt-card__title', item.title);
+  title.dir = 'auto';
+  const details = [item.channel, item.views != null && formatViews(item.views), item.uploaded && formatAgo(item.uploaded)];
+  const meta = span('yt-card__meta', details.filter(Boolean).join(' · '));
+  meta.dir = 'auto';
+  button.append(thumb, title, meta);
+
+  button.addEventListener('click', () => {
+    if (youtubePending !== null) return;
+    requestLoad({ url: watchUrl(item.id) }, { card: button, error: 'yt-error' });
+  });
+  const listItem = document.createElement('li');
+  listItem.append(button);
+  return listItem;
+}
+
+function setCardBusy(card, busy) {
+  card.classList.toggle('is-loading', busy);
+  $('yt-results').classList.toggle('is-busy', busy);
+  $('yt-results').setAttribute('aria-busy', String(busy));
+}
+
+/** Mark the card of the video that's on screen now. */
+function markCurrentYouTube() {
+  const media = serverState?.media;
+  const link = media?.source === 'youtube' ? media.link : null;
+  for (const card of $('yt-results').querySelectorAll('.yt-card')) {
+    const current = link === watchUrl(card.dataset.id);
+    card.classList.toggle('is-current', current);
+    if (current) card.setAttribute('aria-current', 'true');
+    else card.removeAttribute('aria-current');
+  }
 }
 
 /* ---------- Subtitles ---------- */

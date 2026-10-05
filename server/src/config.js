@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
@@ -11,6 +12,14 @@ dotenv.config({ path: path.join(ROOT_DIR, '.env'), quiet: true });
 
 const env = (name, fallback = '') => (process.env[name] ?? fallback).trim();
 const flag = (name) => /^(1|true|yes|on)$/i.test(env(name));
+
+/** DNS_SERVERS: comma-separated IP addresses, e.g. AdGuard DNS "94.140.14.14,94.140.15.15". */
+function pickDnsServers(value) {
+  const servers = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const invalid = servers.filter((entry) => net.isIP(entry) === 0);
+  if (invalid.length) console.warn(`[config] Ignoring DNS_SERVERS entries that aren't IP addresses: ${invalid.join(', ')}`);
+  return servers.filter((entry) => net.isIP(entry) !== 0);
+}
 
 function pickEncoding(name) {
   try {
@@ -30,6 +39,7 @@ export const config = {
   mediaDir: env('MEDIA_DIR') ? path.resolve(ROOT_DIR, env('MEDIA_DIR')) : '',
   allowGuests: flag('ALLOW_GUESTS'),
   allowPrivateUrls: flag('ALLOW_PRIVATE_URLS'),
+  dnsServers: pickDnsServers(env('DNS_SERVERS')),
   subtitleFallbackEncoding: pickEncoding(env('SUBTITLE_FALLBACK_ENCODING', 'windows-1256') || 'windows-1256'),
   ytDlpPath: env('YTDLP_PATH') || 'yt-dlp',
   youtubeMaxHeight: Math.max(144, Number.parseInt(env('YOUTUBE_MAX_HEIGHT'), 10) || 1080),
