@@ -69,6 +69,9 @@
       <header class="topbar" id="topbar">
         <h2 class="topbar__title" id="title"></h2>
         <div class="viewers" id="viewers"></div>
+        <button class="icon-btn" id="btn-anime3rb" type="button" aria-label="Anime3rb" title="Anime3rb">
+          <span data-icon="film"></span>
+        </button>
         <button class="icon-btn" id="btn-change" type="button" aria-label="Change video" title="Change video">
           <span data-icon="film"></span>
         </button>
@@ -191,6 +194,56 @@
           </div>
         </div>
       </div>
+      <div class="sheet" id="sheet-anime3rb" hidden>
+        <div class="sheet__backdrop" data-close></div>
+        <div class="sheet__panel anime-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-anime3rb-title">
+          <header class="sheet__head">
+            <h3 class="sheet__title" id="sheet-anime3rb-title">Anime3rb</h3>
+            <button class="icon-btn" type="button" data-close aria-label="Close"><span data-icon="close"></span></button>
+          </header>
+
+          <div class="anime-hero">
+            <div>
+              <p class="anime-hero__eyebrow">Arabic anime</p>
+              <h4>Watch Anime3rb with AdGuard DNS</h4>
+              <p>Open Anime3rb in a new tab, or configure AdGuard DNS on your device/network to reduce DNS-level ads and trackers.</p>
+            </div>
+            <a class="btn btn--primary" href="https://anime3rb.com/" target="_blank" rel="noopener noreferrer">Open Anime3rb</a>
+          </div>
+
+          <div class="dns-grid">
+            <article class="dns-card">
+              <div>
+                <p class="dns-card__title">AdGuard DNS</p>
+                <p class="hint">IPv4</p>
+              </div>
+              <code>94.140.14.14</code>
+              <code>94.140.15.15</code>
+            </article>
+
+            <article class="dns-card">
+              <div>
+                <p class="dns-card__title">AdGuard DNS</p>
+                <p class="hint">IPv6</p>
+              </div>
+              <code>2a10:50c0::ad1:ff</code>
+              <code>2a10:50c0::ad2:ff</code>
+            </article>
+
+            <article class="dns-card dns-card--wide">
+              <div>
+                <p class="dns-card__title">Encrypted DNS</p>
+                <p class="hint">DoH / DoT</p>
+              </div>
+              <code>https://dns.adguard-dns.com/dns-query</code>
+              <code>tls://dns.adguard-dns.com</code>
+            </article>
+          </div>
+
+          <p class="dns-note">DNS filtering works at the DNS level, so it cannot block every ad served directly by the same domain. Anime3rb may still require its own supported access or membership features.</p>
+        </div>
+      </div>
+
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>
