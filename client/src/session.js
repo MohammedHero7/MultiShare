@@ -1,4 +1,4 @@
-import { DiscordSDK } from '@discord/embedded-app-sdk';
+import { Common, DiscordSDK, Platform } from '@discord/embedded-app-sdk';
 
 const params = new URLSearchParams(location.search);
 
@@ -56,6 +56,17 @@ export async function startSession() {
 
   const auth = await sdk.commands.authenticate({ access_token: data.access_token });
   if (!auth) throw new Error('Discord did not accept the sign-in.');
+
+  // Phones: let people turn the activity sideways for a bigger picture, and keep the
+  // small floating window (after leaving the call screen) in the video's shape.
+  if (sdk.platform === Platform.MOBILE) {
+    const { UNLOCKED, LANDSCAPE } = Common.OrientationLockStateTypeObject;
+    sdk.commands
+      .setOrientationLockState({ lock_state: UNLOCKED, picture_in_picture_lock_state: LANDSCAPE, grid_lock_state: LANDSCAPE })
+      .catch(() => {
+        // older Discord apps: keep their default
+      });
+  }
 
   return {
     sdk,

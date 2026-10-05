@@ -18,7 +18,8 @@ right to share.
 
 ## 1. Create the Discord app
 1. https://discord.com/developers/applications -> New Application.
-2. Activities -> Settings: turn on Enable Activities.
+2. Activities -> Settings: turn on Enable Activities. Under Supported Platforms, tick iOS and
+   Android as well as Web, or Discord's phone apps won't list the activity.
 3. OAuth2: copy the Client ID and Client Secret. Add a redirect URI `https://127.0.0.1`.
 4. In Discord: User Settings -> Advanced -> turn on Developer Mode (needed to test your own activity).
 
@@ -38,6 +39,13 @@ Join a voice channel, open the Activities menu and launch your app.
     npm start                # serves the activity and the API on :3001
 
 Point a tunnel or your domain at port 3001 and set the `/` URL mapping to it.
+
+### On phones (iOS and Android)
+With iOS and Android ticked under Supported Platforms (step 1), open it from a voice channel in
+the Discord app: the rocket button -> your activity. Held upright, the video sits on top with the
+controls underneath; turn the phone sideways for a bigger picture (the activity unlocks rotation
+itself). When you leave the call screen it keeps playing in Discord's small floating window.
+The volume slider is hidden on iPhones and iPads, where only the volume buttons change it.
 
 ### Or host it on Render
 The repository includes a `Dockerfile` (the app plus yt-dlp) and a `render.yaml` Blueprint.
