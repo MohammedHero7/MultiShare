@@ -51,6 +51,7 @@ export class Player {
   }
 
   get duration() {
+    if (this.state?.media?.kind === 'iframe') return Infinity;
     const { duration } = this.video;
     return Number.isFinite(duration) && duration > 0 ? duration : Infinity;
   }
