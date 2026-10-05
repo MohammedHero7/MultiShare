@@ -7,7 +7,7 @@ import { Connection } from './connection.js';
 import { clamp, formatAgo, formatTime, formatViews, joinNames } from './format.js';
 import { hydrateIcons, setIcon } from './icons.js';
 import { Player } from './player.js';
-import { isInDiscord, startSession } from './session.js';
+import { isInDiscord, openExternalLink, startSession } from './session.js';
 import { SubtitleRenderer, parseSubtitles, readSubtitleFile } from './subtitles.js';
 import * as ui from './ui.js';
 
@@ -283,8 +283,18 @@ function searchGoogle(query) {
     $('google-query').focus();
     return;
   }
-  const url = 'https://www.google.com/search?q=' + encodeURIComponent(text);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  openWebsite('https://www.google.com/search?q=' + encodeURIComponent(text));
+}
+
+function openWebsite(url) {
+  openExternalLink(url).catch(() => ui.toast("Couldn't open the website.", { tone: 'error' }));
+}
+
+for (const link of document.querySelectorAll('.anime-site')) {
+  link.addEventListener('click', (event) => {
+    event.preventDefault();
+    openWebsite(link.href);
+  });
 }
 
 $('google-search').addEventListener('click', () => searchGoogle($('google-query').value));
