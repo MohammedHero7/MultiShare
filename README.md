@@ -60,8 +60,24 @@ Know the limits of Render's free plan: every viewer's video goes out through the
 5 GB a month is included, after which Render charges per GB or suspends the service. It
 sleeps after 15 minutes without traffic and takes about a minute to wake, so open the activity
 once, wait, then open it again. YouTube may refuse Render's servers ("confirm you're not a
-bot"), and the Library tab doesn't work there because your movie folder isn't on Render.
-yt-dlp updates itself each time the server starts.
+bot"); see "YouTube on a hosting service" below for the fix. The Library tab doesn't work there
+because your movie folder isn't on Render. yt-dlp updates itself each time the server starts.
+
+### YouTube on a hosting service
+YouTube asks servers in data centres (Render and the like) to sign in, so videos fail with
+"YouTube asked the server to prove it isn't a bot". Give the server the cookies of a signed-in
+YouTube account:
+1. Use a spare Google account, not your main one: YouTube can block accounts used this way.
+2. Open a private (incognito) window, sign in to YouTube there, and export the youtube.com
+   cookies with a cookies.txt extension ("Get cookies.txt LOCALLY" for Chrome, "cookies.txt" for
+   Firefox; allow it in private windows). Save the file as `youtube-cookies.txt`, then close the
+   private window without signing out, so the cookies stay valid.
+3. On Render: your service -> Environment -> Secret Files -> add `youtube-cookies.txt` with the
+   file's contents, and add the environment variable
+   `YOUTUBE_COOKIES=/etc/secrets/youtube-cookies.txt`. Save; Render redeploys.
+   On your own computer: put the file next to `.env` and set `YOUTUBE_COOKIES=youtube-cookies.txt`.
+4. The server log shows `YouTube cookies: on`. Cookies expire after a while; when the message
+   comes back, export them again. Keep the file private: it signs in to that account.
 
 ## Optional
 - YouTube: install yt-dlp on the computer running the server: `winget install yt-dlp.yt-dlp`,

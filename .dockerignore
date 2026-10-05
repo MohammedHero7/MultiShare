@@ -3,6 +3,7 @@ client/dist
 .env
 .env.*
 !.env.example
+*cookies*.txt
 .git
 .claude
 *.log

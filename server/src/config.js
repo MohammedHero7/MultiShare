@@ -43,6 +43,7 @@ export const config = {
   subtitleFallbackEncoding: pickEncoding(env('SUBTITLE_FALLBACK_ENCODING', 'windows-1256') || 'windows-1256'),
   ytDlpPath: env('YTDLP_PATH') || 'yt-dlp',
   youtubeMaxHeight: Math.max(144, Number.parseInt(env('YOUTUBE_MAX_HEIGHT'), 10) || 1080),
+  youtubeCookies: env('YOUTUBE_COOKIES') ? path.resolve(ROOT_DIR, env('YOUTUBE_COOKIES')) : '',
   signingSecret: env('MEDIA_SIGNING_SECRET') || crypto.randomBytes(32).toString('hex'),
   clientDist: path.join(ROOT_DIR, 'client', 'dist'),
 };

@@ -10,6 +10,9 @@
 // every video.
 
 import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { pipeline } from 'node:stream';
 import { config } from './config.js';
 import { UserError } from './errors.js';
@@ -153,9 +156,41 @@ function browseArgs(target) {
     `1:${LIST_RESULTS}`,
     '--js-runtimes',
     'node',
+    ...cookieArgs(),
     '--',
     target,
   ];
+}
+
+// YouTube asks servers in data centres to sign in ("confirm you're not a bot"). A
+// cookies.txt from a browser signed in to YouTube answers that. yt-dlp saves cookie
+// changes back to the file, so it gets a private copy: the original may be read-only,
+// like Render's secret files.
+let cookiesCopy = null;
+
+function prepareCookies() {
+  if (!config.youtubeCookies) return;
+  try {
+    const text = fs.readFileSync(config.youtubeCookies, 'utf8');
+    if (!/^# (Netscape )?HTTP Cookie File/m.test(text.slice(0, 500))) {
+      console.warn(`  ! ${config.youtubeCookies} isn't a cookies.txt file (Netscape format), so YouTube cookies are off.`);
+      return;
+    }
+    const copy = path.join(os.tmpdir(), 'watch-party-youtube-cookies.txt');
+    fs.writeFileSync(copy, text, { mode: 0o600 });
+    cookiesCopy = copy;
+    console.log(`  YouTube cookies: on (${config.youtubeCookies})`);
+  } catch (error) {
+    console.warn(`  ! Couldn't read YOUTUBE_COOKIES (${error.code || error.message}), so YouTube cookies are off.`);
+  }
+}
+
+const cookieArgs = () => (cookiesCopy ? ['--cookies', cookiesCopy] : []);
+
+function botHint() {
+  if (cookiesCopy) return 'The cookies in YOUTUBE_COOKIES may have expired: export fresh ones (see the README).';
+  if (config.youtubeCookies) return "The file in YOUTUBE_COOKIES couldn't be used; the server log says why.";
+  return 'YouTube does this to servers in data centres (like Render). Give the server YouTube cookies with YOUTUBE_COOKIES (see the README), or run it on a home computer.';
 }
 
 const UNAVAILABLE_TITLE = /^\[(private|deleted) video\]$/i;
@@ -282,6 +317,7 @@ function capVariants(text, maxHeight) {
 
 /** Log at startup whether YouTube links will work, so a missing yt-dlp shows up early. */
 export function logYouTubeSupport() {
+  prepareCookies();
   const report = (error, stdout) => {
     if (error?.code === 'ENOENT') {
       console.warn(`  ! yt-dlp was not found, so YouTube links won't work. ${INSTALL_HINT}`);
@@ -379,6 +415,7 @@ function ytDlpArgs(id) {
     `res:${config.youtubeMaxHeight},vcodec:h264`,
     '--print',
     '%(.{title,channel,uploader,duration,url,manifest_url,acodec,protocol,http_headers})j',
+    ...cookieArgs(),
     '--',
     `https://www.youtube.com/watch?v=${id}`,
   ];
@@ -468,7 +505,7 @@ function spawnError(error) {
 
 const YT_DLP_ERRORS = [
   [/no such option|unrecognized arguments/i, `Your yt-dlp is too old for YouTube. ${UPDATE_HINT}`],
-  [/not a bot/i, `YouTube asked the server to prove it isn't a bot. Wait a while and try again. ${UPDATE_HINT}`],
+  [/not a bot/i, () => `YouTube asked the server to prove it isn't a bot. ${botHint()}`],
   [/confirm your age|age.restricted|inappropriate for some users/i, "This video is age-restricted, so it can't play here."],
   [/private video/i, 'This video is private.'],
   [/members.only|join this channel/i, 'This video is only for channel members.'],
@@ -483,7 +520,7 @@ function ytDlpError(stderr) {
   // Match the ERROR lines, not warnings printed before them.
   const errors = stderr.split('\n').filter((line) => line.startsWith('ERROR:')).join('\n') || stderr;
   for (const [pattern, message] of YT_DLP_ERRORS) {
-    if (pattern.test(errors)) return new UserError(message);
+    if (pattern.test(errors)) return new UserError(typeof message === 'function' ? message() : message);
   }
   return new UserError(`YouTube wouldn't give the server this video. ${UPDATE_HINT}`);
 }
