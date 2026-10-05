@@ -8,6 +8,7 @@ import { handleInteraction } from './interactions.js';
 import { handleFile } from './library.js';
 import { handleMedia } from './media.js';
 import { attachSockets } from './rooms.js';
+import { handleStrayWebNavigation, handleWeb, handleWebCookie, handleWebRuntime } from './web.js';
 import { handleThumbnail, handleYouTube, logYouTubeSupport } from './youtube.js';
 
 const app = express();
@@ -40,6 +41,15 @@ app.get('/api/media', handleMedia);
 app.get('/api/file', handleFile);
 app.get('/api/youtube', handleYouTube);
 app.get('/api/thumb', handleThumbnail);
+
+// The activity's browser: websites opened inside the activity (see web.js).
+app.get('/api/web-runtime.js', handleWebRuntime);
+app.post('/api/web/:token/_cookie', express.raw({ type: () => true, limit: '16kb' }), handleWebCookie);
+app.all('/api/web/*', express.raw({ type: () => true, limit: '5mb' }), handleWeb);
+
+// Before the activity's own files: a website's script in the browser can send its
+// frame to "/" or any other path on this server.
+app.use(handleStrayWebNavigation);
 
 // In production the server also serves the built activity (client/dist).
 const indexHtml = path.join(config.clientDist, 'index.html');

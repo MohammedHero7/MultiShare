@@ -1722,7 +1722,7 @@ svg {
   z-index: 2;
 }
 
-/* ---------- Google web search ---------- */
+/* ---------- Web search (Anime tab) ---------- */
 .anime-google {
   margin-top: 18px;
   padding-top: 16px;
@@ -1753,5 +1753,75 @@ svg {
   }
   .anime-google__row .btn {
     width: 100%;
+  }
+}
+
+/* ---------- Browser (websites opened inside the activity) ---------- */
+.sheet--web {
+  padding: clamp(0px, 2vw, 20px);
+}
+.sheet__panel--web {
+  display: flex;
+  flex-direction: column;
+  width: min(1400px, 100%);
+  height: 100%;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+.web__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 8px 8px 6px;
+  border-bottom: 1px solid var(--velvet-800);
+}
+.web__bar .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+.web__address {
+  flex: 1;
+  min-width: 0;
+  margin: 0 6px;
+}
+.web__address .input {
+  min-height: 38px;
+  font-size: 14px;
+}
+.web__progress {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--tungsten), transparent);
+  background-size: 50% 100%;
+  background-repeat: no-repeat;
+  animation: web-progress 1.1s linear infinite;
+}
+@keyframes web-progress {
+  from {
+    background-position: -50% 0;
+  }
+  to {
+    background-position: 150% 0;
+  }
+}
+.web__frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+@media (max-width: 560px) {
+  .sheet--web {
+    padding: 0;
+  }
+  .sheet__panel--web {
+    border-radius: 0;
+    border: 0;
+  }
+  #web-forward,
+  #web-reload {
+    display: none;
   }
 }

@@ -136,8 +136,20 @@ const BROWSER_UA =
 /**
  * GET a URL, following up to 5 redirects. Resolves with the response stream once
  * headers arrive; `response.finalUrl` is the URL after redirects.
+ * With `followRedirects: false` a redirect comes back as the response itself.
  */
-export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}) {
+export function request(
+  rawUrl,
+  {
+    method = 'GET',
+    body = null,
+    headers = {},
+    signal,
+    timeoutMs = 20000,
+    timeoutMessage = 'The video server took too long to respond.',
+    followRedirects = true,
+  } = {},
+) {
   return new Promise((resolve, reject) => {
     let hops = 0;
 
@@ -158,7 +170,7 @@ export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}
         req = lib.request(
           url,
           {
-            method: 'GET',
+            method,
             headers: { 'user-agent': BROWSER_UA, accept: '*/*', ...headers },
             agent: agents[url.protocol],
             lookup: guardedLookup,
@@ -168,7 +180,7 @@ export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}
           (res) => {
             req.setTimeout(0);
             const location = res.headers.location;
-            if (location && [301, 302, 303, 307, 308].includes(res.statusCode)) {
+            if (followRedirects && location && [301, 302, 303, 307, 308].includes(res.statusCode)) {
               res.resume();
               if (++hops > 5) {
                 reject(new UserError('That link redirects too many times.'));
@@ -193,10 +205,10 @@ export function request(rawUrl, { headers = {}, signal, timeoutMs = 20000 } = {}
         return;
       }
       req.setTimeout(timeoutMs, () => {
-        req.destroy(new UserError('The video server took too long to respond.'));
+        req.destroy(new UserError(timeoutMessage));
       });
       req.on('error', reject);
-      req.end();
+      req.end(body ?? undefined);
     };
 
     attempt(rawUrl);

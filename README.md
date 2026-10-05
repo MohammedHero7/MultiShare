@@ -8,6 +8,10 @@ Pick a video from three sources in the Change video panel: Link, Library and You
 YouTube tab searches YouTube and shows the results as a video grid. Paste a playlist or channel
 link there to list its videos, and see what the room has played before.
 
+The Anime tab opens websites in a browser inside the activity: the anime sites, a web search
+(DuckDuckGo), or any address you type. Only you see what you browse; load a video for everyone
+from the Link tab as usual.
+
 Works with YouTube links (needs yt-dlp, see Optional) and direct links (.mp4, .webm, .m3u8).
 It does not work with Netflix or other DRM-protected sites. Only stream content you have the
 right to share.
@@ -70,7 +74,24 @@ yt-dlp updates itself each time the server starts.
 - Private links: ALLOW_PRIVATE_URLS=true allows links to servers on your own network (Jellyfin, NAS).
 - DNS filtering: DNS_SERVERS=94.140.14.14,94.140.15.15 makes the server look up every site it
   fetches through AdGuard DNS, so ad, tracker and malware domains are refused. yt-dlp still uses
-  the computer's own DNS.
+  the computer's own DNS. This covers the in-activity browser too, so most ads don't load there.
+
+## The in-activity browser
+Discord only lets an activity load pages from its own server, so websites opened in the Anime
+tab are fetched by your server and passed through, with their links pointed back at it. Pages
+run sandboxed: a website can't reach the activity or act in the watch party. Popups are blocked,
+and links that would open a new tab open in place. The button next to the address opens the page
+outside Discord instead.
+
+What to expect:
+- Every page goes through your server, so it counts against your upload speed and, on Render,
+  the 5 GB a month.
+- Sites behind a "checking your browser" page (Cloudflare and similar) usually don't open, and
+  sites that build everything with JavaScript may not work properly. Use "Open outside Discord"
+  for those.
+- Search uses DuckDuckGo, since Google's results need scripts that don't work this way.
+- Cookies (logins, settings) are kept on the server for the session and reset when the activity
+  reconnects.
 
 ## Notes
 - Videos stream through your server, since Discord only lets activities reach their own backend.

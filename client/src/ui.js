@@ -92,7 +92,9 @@ export function openSheet(id) {
   sheet.hidden = false;
   openSheetId = id;
   app.classList.add('has-sheet');
-  const focusTarget = sheet.querySelector('.tabpanel:not([hidden]) input, input:not([type=checkbox]):not([hidden]), button');
+  const focusTarget =
+    sheet.querySelector('[data-autofocus]') ??
+    sheet.querySelector('.tabpanel:not([hidden]) input, input:not([type=checkbox]):not([hidden]), button');
   requestAnimationFrame(() => focusTarget?.focus());
 }
 
