@@ -276,6 +276,28 @@ $('empty-youtube').addEventListener('click', () => openVideoSheet('youtube'));
 const currentSourceTab = () => ({ youtube: 'youtube', library: 'library' })[serverState?.media?.source] ?? 'link';
 $('btn-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('btn-anime3rb').addEventListener('click', () => openVideoSheet('anime'));
+
+function searchGoogle(query) {
+  const text = String(query ?? '').trim();
+  if (!text) {
+    $('google-query').focus();
+    return;
+  }
+  const url = 'https://www.google.com/search?q=' + encodeURIComponent(text);
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+$('google-search').addEventListener('click', () => searchGoogle($('google-query').value));
+$('google-query').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') searchGoogle($('google-query').value);
+});
+for (const button of document.querySelectorAll('[data-google-query]')) {
+  button.addEventListener('click', () => {
+    const query = button.dataset.googleQuery || '';
+    $('google-query').value = query;
+    searchGoogle(query);
+  });
+}
 $('notice-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('splash-retry').addEventListener('click', () => location.reload());
 
