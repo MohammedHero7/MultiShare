@@ -12,7 +12,7 @@ import { getUser } from './discord.js';
 import { UserError } from './errors.js';
 import { assertLibraryVideo, libraryEnabled, listLibrary, readLibrarySubtitle, siblingSubtitles } from './library.js';
 import { fetchSubtitleUrl, prettyName, probeUrl, titleFromUrl } from './media.js';
-import { libraryUrl, proxiedUrl } from './signing.js';
+import { libraryUrl, proxiedUrl, webToken } from './signing.js';
 import { browseYouTube, loadYouTube, youtubeVideoId } from './youtube.js';
 
 const rooms = new Map();
@@ -59,6 +59,7 @@ class Room {
       users: this.users(),
       library: libraryEnabled(),
       encoding: config.subtitleFallbackEncoding,
+      web: webToken(),
       serverTime: Date.now(),
     });
     if (this.subs) client.send({ t: 'subs', subs: this.subs });

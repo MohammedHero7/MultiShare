@@ -183,11 +183,11 @@
             </div>
             <div class="anime-google">
               <h4>Search the web</h4>
-              <p>Search Google for anime, episodes, hosts, or any website.</p>
+              <p>Search for anime, episodes, hosts, or any website. Results open right here in the activity.</p>
               <div class="field-row anime-google__row">
                 <input class="input" id="google-query" type="search" autocomplete="off" spellcheck="false"
-                  placeholder="Search Google…" aria-label="Search Google" />
-                <button class="btn btn--primary" id="google-search" type="button">Google Search</button>
+                  placeholder="Search the web…" aria-label="Search the web" />
+                <button class="btn btn--primary" id="google-search" type="button">Search</button>
               </div>
               <div class="anime-google__quick" aria-label="Quick Google searches">
                 <button class="btn btn--secondary" type="button" data-google-query="site:anime3rb.com anime">Anime3rb</button>
@@ -298,6 +298,27 @@
               <button class="btn btn--secondary" id="subs-later" type="button" aria-label="Show subtitles half a second later">+0.5 s</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="sheet sheet--web" id="sheet-web" hidden>
+        <div class="sheet__backdrop" data-close></div>
+        <div class="sheet__panel sheet__panel--web" role="dialog" aria-modal="true" aria-label="Website">
+          <div class="web__bar">
+            <button class="icon-btn" id="web-back" type="button" aria-label="Back" title="Back"><span data-icon="back"></span></button>
+            <button class="icon-btn" id="web-forward" type="button" aria-label="Forward" title="Forward"><span data-icon="forward"></span></button>
+            <button class="icon-btn" id="web-reload" type="button" aria-label="Reload" title="Reload"><span data-icon="reload"></span></button>
+            <form class="web__address" id="web-form">
+              <input class="input" id="web-url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+                placeholder="Search or type a web address" aria-label="Search or type a web address" />
+            </form>
+            <button class="icon-btn" id="web-external" type="button" aria-label="Open outside Discord" title="Open outside Discord"><span data-icon="external"></span></button>
+            <button class="icon-btn" type="button" data-close aria-label="Close" title="Close"><span data-icon="close"></span></button>
+          </div>
+          <div class="web__progress" id="web-progress" hidden></div>
+          <iframe class="web__frame" id="web-frame" title="Website" data-autofocus
+            sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock allow-presentation"
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen></iframe>
         </div>
       </div>
 

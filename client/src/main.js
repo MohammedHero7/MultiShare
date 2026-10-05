@@ -7,7 +7,8 @@ import { Connection } from './connection.js';
 import { clamp, formatAgo, formatTime, formatViews, joinNames } from './format.js';
 import { hydrateIcons, setIcon } from './icons.js';
 import { Player } from './player.js';
-import { isInDiscord, openExternalLink, startSession } from './session.js';
+import { openWebsite, searchUrl, setWebToken } from './browser.js';
+import { isInDiscord, startSession } from './session.js';
 import { SubtitleRenderer, parseSubtitles, readSubtitleFile } from './subtitles.js';
 import * as ui from './ui.js';
 
@@ -85,6 +86,7 @@ function onWelcome(message) {
   users = message.users;
   libraryEnabled = message.library;
   subtitleEncoding = message.encoding || subtitleEncoding;
+  setWebToken(message.web);
   document.querySelector('#video-tabs [data-tab=library]').hidden = !libraryEnabled;
   $('empty-library').hidden = !libraryEnabled;
   ui.hideSplash();
@@ -277,19 +279,16 @@ const currentSourceTab = () => ({ youtube: 'youtube', library: 'library' })[serv
 $('btn-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('btn-anime3rb').addEventListener('click', () => openVideoSheet('anime'));
 
-function searchGoogle(query) {
+function searchWeb(query) {
   const text = String(query ?? '').trim();
   if (!text) {
     $('google-query').focus();
     return;
   }
-  openWebsite('https://www.google.com/search?q=' + encodeURIComponent(text));
+  openWebsite(searchUrl(text));
 }
 
-function openWebsite(url) {
-  openExternalLink(url).catch(() => ui.toast("Couldn't open the website.", { tone: 'error' }));
-}
-
+// The site cards and web search open in the activity's own browser (browser.js).
 for (const link of document.querySelectorAll('.anime-site')) {
   link.addEventListener('click', (event) => {
     event.preventDefault();
@@ -297,15 +296,15 @@ for (const link of document.querySelectorAll('.anime-site')) {
   });
 }
 
-$('google-search').addEventListener('click', () => searchGoogle($('google-query').value));
+$('google-search').addEventListener('click', () => searchWeb($('google-query').value));
 $('google-query').addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') searchGoogle($('google-query').value);
+  if (event.key === 'Enter') searchWeb($('google-query').value);
 });
 for (const button of document.querySelectorAll('[data-google-query]')) {
   button.addEventListener('click', () => {
     const query = button.dataset.googleQuery || '';
     $('google-query').value = query;
-    searchGoogle(query);
+    searchWeb(query);
   });
 }
 $('notice-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
