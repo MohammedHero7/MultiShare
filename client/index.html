@@ -149,6 +149,47 @@
             <button class="tab" role="tab" type="button" data-tab="youtube" aria-selected="false">
               <span data-icon="youtube"></span>YouTube
             </button>
+            <button class="tab" role="tab" type="button" data-tab="anime" aria-selected="false">
+              <span data-icon="film"></span>Anime
+            </button>
+          </div>
+          <div class="tabpanel anime-tabpanel" data-panel="anime" hidden>
+            <div class="anime-sites">
+              <a class="anime-site" href="https://4i.5dnoavk.shop/" target="_blank" rel="noopener noreferrer">
+                <span class="anime-site__icon">A4</span>
+                <span class="anime-site__body">
+                  <strong>Anime4up</strong>
+                  <span>Open the anime website and choose an episode.</span>
+                </span>
+                <span class="btn btn--primary">Open</span>
+              </a>
+              <a class="anime-site" href="https://anime3rb.com/" target="_blank" rel="noopener noreferrer">
+                <span class="anime-site__icon">A3</span>
+                <span class="anime-site__body">
+                  <strong>Anime3rb</strong>
+                  <span>Arabic anime website.</span>
+                </span>
+                <span class="btn btn--secondary">Open</span>
+              </a>
+              <a class="anime-site" href="https://share4max.net/" target="_blank" rel="noopener noreferrer">
+                <span class="anime-site__icon">S4</span>
+                <span class="anime-site__body">
+                  <strong>Share4Max</strong>
+                  <span>Open the episode host when an episode uses Share4Max.</span>
+                </span>
+                <span class="btn btn--secondary">Open</span>
+              </a>
+            </div>
+            <div class="anime-dns">
+              <h4>AdGuard DNS</h4>
+              <p>Use these DNS settings to block ads and trackers while browsing.</p>
+              <div class="dns-grid">
+                <div class="dns-card"><span class="dns-card__title">IPv4</span><code>94.140.14.14</code><code>94.140.15.15</code></div>
+                <div class="dns-card"><span class="dns-card__title">IPv6</span><code>2a10:50c0::ad1:ff</code><code>2a10:50c0::ad2:ff</code></div>
+                <div class="dns-card dns-card--wide"><span class="dns-card__title">DNS-over-HTTPS</span><code>https://dns.adguard-dns.com/dns-query</code></div>
+                <div class="dns-card dns-card--wide"><span class="dns-card__title">DNS-over-TLS</span><code>tls://dns.adguard-dns.com</code></div>
+              </div>
+            </div>
           </div>
           <div class="tabpanel" data-panel="link">
             <label class="label" for="sheet-url">Video link</label>
@@ -242,83 +283,6 @@
               <button class="btn btn--secondary" id="subs-later" type="button" aria-label="Show subtitles half a second later">+0.5 s</button>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="sheet" id="sheet-anime3rb" hidden>
-        <div class="sheet__backdrop" data-close></div>
-        <div class="sheet__panel anime-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-anime3rb-title">
-          <header class="sheet__head">
-            <h3 class="sheet__title" id="sheet-anime3rb-title">Anime Sites</h3>
-            <button class="icon-btn" type="button" data-close aria-label="Close"><span data-icon="close"></span></button>
-          </header>
-
-          <div class="anime-hero">
-            <div>
-              <p class="anime-hero__eyebrow">Arabic anime</p>
-              <h4>Anime websites</h4>
-              <p>Choose a site below. Anime4up uses its homepage entry point, then episodes can be opened through Share4Max.</p>
-            </div>
-          </div>
-
-          <div class="anime-sites">
-            <article class="anime-site">
-              <div class="anime-site__icon">A4</div>
-              <div class="anime-site__body">
-                <h5>Anime4up</h5>
-                <p>Arabic anime and episodes.</p>
-              </div>
-              <a class="btn btn--primary" href="https://4i.5dnoavk.shop/" target="_blank" rel="noopener noreferrer">Enter website</a>
-            </article>
-
-            <article class="anime-site">
-              <div class="anime-site__icon">A3</div>
-              <div class="anime-site__body">
-                <h5>Anime3rb</h5>
-                <p>Arabic anime website.</p>
-              </div>
-              <a class="btn btn--secondary" href="https://anime3rb.com/" target="_blank" rel="noopener noreferrer">Enter website</a>
-            </article>
-
-            <article class="anime-site anime-site--share">
-              <div class="anime-site__icon">▶</div>
-              <div class="anime-site__body">
-                <h5>Share4Max</h5>
-                <p>Open the episode host used by Anime4up.</p>
-              </div>
-              <a class="btn btn--secondary" href="https://share4max.net/" target="_blank" rel="noopener noreferrer">Open Share4Max</a>
-            </article>
-          </div>
-
-          <div class="dns-grid">
-            <article class="dns-card">
-              <div>
-                <p class="dns-card__title">AdGuard DNS</p>
-                <p class="hint">IPv4</p>
-              </div>
-              <code>94.140.14.14</code>
-              <code>94.140.15.15</code>
-            </article>
-
-            <article class="dns-card">
-              <div>
-                <p class="dns-card__title">AdGuard DNS</p>
-                <p class="hint">IPv6</p>
-              </div>
-              <code>2a10:50c0::ad1:ff</code>
-              <code>2a10:50c0::ad2:ff</code>
-            </article>
-
-            <article class="dns-card dns-card--wide">
-              <div>
-                <p class="dns-card__title">Encrypted DNS</p>
-                <p class="hint">DoH / DoT</p>
-              </div>
-              <code>https://dns.adguard-dns.com/dns-query</code>
-              <code>tls://dns.adguard-dns.com</code>
-            </article>
-          </div>
-
-          <p class="dns-note">DNS filtering works at the DNS level, so it cannot block every ad served directly by the same domain. Anime3rb may still require its own supported access or membership features.</p>
         </div>
       </div>
 
