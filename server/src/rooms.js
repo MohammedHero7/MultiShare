@@ -155,7 +155,7 @@ class Room {
         url: String(source.url).trim(),
         title: titleFromUrl(probe.finalUrl),
         kind: probe.kind,
-        src: proxiedUrl(String(source.url).trim()),
+        src: probe.kind === 'iframe' ? probe.finalUrl : proxiedUrl(String(source.url).trim()),
       };
     }
     if (ticket !== this.loadSeq) throw new UserError('Someone else loaded a video at the same moment.');
