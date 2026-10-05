@@ -1,0 +1,27 @@
+# Render Blueprint. In the Render dashboard: New → Blueprint → pick this repository.
+# Render asks for the values marked "sync: false" while creating the service.
+
+services:
+  - type: web
+    name: discord-watch-party
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # Discord Developer Portal → your app → OAuth2
+      - key: VITE_DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      # Keeps media links valid when the server restarts.
+      - key: MEDIA_SIGNING_SECRET
+        generateValue: true
+      # AdGuard DNS for every site the server fetches.
+      - key: DNS_SERVERS
+        value: 94.140.14.14,94.140.15.15
+      # Every viewer's video goes out through Render, and the free plan includes
+      # 5 GB a month. 720p uses about half the data of 1080p.
+      - key: YOUTUBE_MAX_HEIGHT
+        value: "720"
+      - key: SUBTITLE_FALLBACK_ENCODING
+        value: windows-1256

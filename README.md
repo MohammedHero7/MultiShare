@@ -4,6 +4,10 @@ A Discord Activity: paste a video link and everyone in the voice channel watches
 Play, pause and seek are shared. Optional shared subtitles (Arabic supported), a movie library
 from a folder on your PC, and a `/watch <url>` command.
 
+Pick a video from three sources in the Change video panel: Link, Library and YouTube. The
+YouTube tab searches YouTube and shows the results as a video grid. Paste a playlist or channel
+link there to list its videos, and see what the room has played before.
+
 Works with YouTube links (needs yt-dlp, see Optional) and direct links (.mp4, .webm, .m3u8).
 It does not work with Netflix or other DRM-protected sites. Only stream content you have the
 right to share.
@@ -31,14 +35,32 @@ Join a voice channel, open the Activities menu and launch your app.
 
 Point a tunnel or your domain at port 3001 and set the `/` URL mapping to it.
 
+### Or host it on Render
+The repository includes a `Dockerfile` (the app plus yt-dlp) and a `render.yaml` Blueprint.
+1. Put the project in a GitHub repository (`.env` stays out of it; it's in `.gitignore`).
+2. Render dashboard -> New -> Blueprint -> pick the repository. Enter your Client ID and Client
+   Secret when asked. The rest is preset: AdGuard DNS, YouTube capped at 720p, and a
+   generated MEDIA_SIGNING_SECRET.
+3. When it's live, in the Discord Developer Portal -> Activities -> URL Mappings, map `/` to the
+   service's host, e.g. `discord-watch-party.onrender.com` (without https://).
+
+Know the limits of Render's free plan: every viewer's video goes out through the server, and
+5 GB a month is included, after which Render charges per GB or suspends the service. It
+sleeps after 15 minutes without traffic and takes about a minute to wake, so open the activity
+once, wait, then open it again. YouTube may refuse Render's servers ("confirm you're not a
+bot"), and the Library tab doesn't work there because your movie folder isn't on Render.
+yt-dlp updates itself each time the server starts.
+
 ## Optional
 - YouTube: install yt-dlp on the computer running the server: `winget install yt-dlp.yt-dlp`,
   then open a new terminal and run `npm run dev` again. The server prints `YouTube links: on`
-  when it finds it. yt-dlp uses your Node.js (version 22 or newer) to get past YouTube's checks.
+  when it finds it. yt-dlp needs a JavaScript runtime to get past YouTube's checks: Node.js 22 or
+  newer, or Deno (`winget install DenoLand.Deno`).
   If you run npm in VS Code's terminal, restart VS Code after installing. YouTube changes often,
   so if links stop working, update it: `winget upgrade yt-dlp.yt-dlp` (or `yt-dlp -U`).
   YOUTUBE_MAX_HEIGHT (default 1080) caps the quality; lower it to 720 if your upload is slow.
-  Set YTDLP_PATH if yt-dlp isn't on your PATH.
+  Set YTDLP_PATH if yt-dlp isn't on your PATH. The YouTube tab uses yt-dlp too: each search
+  takes a few seconds, and results are cached for 10 minutes.
 - Library: set MEDIA_DIR in .env. A Library tab lists videos and subtitles from that folder.
   Subtitle files named like the movie (Movie.srt, Movie.ar.srt) load automatically.
 - /watch command: set DISCORD_PUBLIC_KEY, set the Interactions Endpoint URL to
@@ -46,6 +68,9 @@ Point a tunnel or your domain at port 3001 and set the `/` URL mapping to it.
 - Test without Discord: ALLOW_GUESTS=true, then open http://localhost:5173/?room=test in two tabs.
   Keep it off when deployed.
 - Private links: ALLOW_PRIVATE_URLS=true allows links to servers on your own network (Jellyfin, NAS).
+- DNS filtering: DNS_SERVERS=94.140.14.14,94.140.15.15 makes the server look up every site it
+  fetches through AdGuard DNS, so ad, tracker and malware domains are refused. yt-dlp still uses
+  the computer's own DNS.
 
 ## Notes
 - Videos stream through your server, since Discord only lets activities reach their own backend.

@@ -4,6 +4,9 @@
 // through this server. Because the server fetches links that people paste, it
 // refuses private/local network addresses (unless ALLOW_PRIVATE_URLS=true) and
 // checks the address at connect time, after every redirect.
+//
+// With DNS_SERVERS set (e.g. AdGuard DNS), names are looked up through those
+// servers instead of the computer's own, so domains they filter can't be fetched.
 
 import dns from 'node:dns';
 import http from 'node:http';
@@ -38,6 +41,7 @@ for (const [address, prefix] of [
 }
 
 const PRIVATE_MESSAGE = 'Links to private or local network addresses are blocked on this server.';
+const FILTERED_MESSAGE = "This server's DNS filter blocks that site (it's on an ad, tracker or malware list).";
 
 export function isBlockedAddress(ip) {
   if (config.allowPrivateUrls) return false;
@@ -46,16 +50,52 @@ export function isBlockedAddress(ip) {
   return blocked.check(ip, family === 6 ? 'ipv6' : 'ipv4');
 }
 
-function guardedLookup(hostname, options, callback) {
+// Filtering DNS servers answer blocked names with an unspecified address. That has
+// to be refused even when ALLOW_PRIVATE_URLS lets local addresses through, or the
+// request would go to this computer instead.
+const isFilteredAnswer = (ip) => ip === '0.0.0.0' || ip === '::';
+
+const resolver = config.dnsServers.length ? new dns.Resolver({ timeout: 4000, tries: 2 }) : null;
+resolver?.setServers(config.dnsServers);
+
+function systemLookup(hostname, options, callback) {
   const lookupOptions = { all: true };
   if (options?.family) lookupOptions.family = options.family;
   if (options?.hints) lookupOptions.hints = options.hints;
+  dns.lookup(hostname, lookupOptions, callback);
+}
 
-  dns.lookup(hostname, lookupOptions, (err, addresses) => {
+/** Look up every address for a name: through DNS_SERVERS when set, else the system resolver. */
+function lookupAll(hostname, options, callback) {
+  if (!resolver || net.isIP(hostname)) {
+    systemLookup(hostname, options, callback);
+    return;
+  }
+  const families = options?.family === 4 ? [4] : options?.family === 6 ? [6] : [4, 6];
+  const found = [];
+  let pending = families.length;
+  let lastError = null;
+  for (const family of families) {
+    const resolve = family === 4 ? resolver.resolve4 : resolver.resolve6;
+    resolve.call(resolver, hostname, (err, addresses) => {
+      if (err) lastError = err;
+      else found.push(...addresses.map((address) => ({ address, family })));
+      if (--pending > 0) return;
+      if (found.length) callback(null, found);
+      // Names only the local network knows (a NAS, Jellyfin) aren't in public DNS.
+      else if (config.allowPrivateUrls && ['ENOTFOUND', 'ENODATA'].includes(lastError?.code)) systemLookup(hostname, options, callback);
+      else callback(lastError);
+    });
+  }
+}
+
+function guardedLookup(hostname, options, callback) {
+  lookupAll(hostname, options, (err, addresses) => {
     if (err) return callback(err);
-    const allowed = addresses.filter((entry) => !isBlockedAddress(entry.address));
+    const answers = addresses.filter((entry) => !isFilteredAnswer(entry.address));
+    const allowed = answers.filter((entry) => !isBlockedAddress(entry.address));
     if (allowed.length === 0) {
-      const error = new UserError(PRIVATE_MESSAGE);
+      const error = new UserError(answers.length === 0 ? FILTERED_MESSAGE : PRIVATE_MESSAGE);
       error.code = 'EBLOCKED';
       return callback(error);
     }

@@ -15,7 +15,7 @@
 
         <section class="empty" id="empty" hidden>
           <h1 class="empty__title">What are we watching?</h1>
-          <p class="empty__lead">Paste a link to a video file. It opens for everyone here, paused at the start.</p>
+          <p class="empty__lead">Paste a link or pick from YouTube. It opens for everyone here, paused at the start.</p>
           <div class="field-row">
             <input class="input" id="empty-url" type="url" inputmode="url" autocomplete="off" spellcheck="false"
               placeholder="https://example.com/movie.mp4" aria-label="Video link" />
@@ -23,8 +23,21 @@
           </div>
           <p class="field-error" id="empty-error" role="alert"></p>
           <p class="empty__hint">Works with YouTube links and .mp4, .webm or .m3u8 links.</p>
-          <div class="empty__more">
-            <button class="btn btn--text" id="empty-library" type="button" hidden>Browse the library</button>
+          <div class="sources">
+            <button class="source" id="empty-youtube" type="button">
+              <span class="source__icon" data-icon="youtube"></span>
+              <span>
+                <span class="source__name">YouTube</span>
+                <span class="source__desc">Search videos, playlists and channels</span>
+              </span>
+            </button>
+            <button class="source" id="empty-library" type="button" hidden>
+              <span class="source__icon" data-icon="folder"></span>
+              <span>
+                <span class="source__name">Library</span>
+                <span class="source__desc">Movies saved on the server</span>
+              </span>
+            </button>
             <button class="btn btn--text" id="empty-sample" type="button">Try a sample video</button>
           </div>
           <p class="empty__people" id="empty-people"></p>
@@ -67,7 +80,13 @@
       </main>
 
       <header class="topbar" id="topbar">
-        <h2 class="topbar__title" id="title"></h2>
+        <div class="topbar__heading">
+          <h2 class="topbar__title" id="title"></h2>
+          <p class="topbar__source" id="source" hidden>
+            <span data-icon="link"></span>
+            <span class="topbar__source-text" id="source-text" dir="auto"></span>
+          </p>
+        </div>
         <div class="viewers" id="viewers"></div>
         <button class="icon-btn" id="btn-anime3rb" type="button" aria-label="Anime3rb" title="Anime3rb">
           <span data-icon="film"></span>
@@ -115,14 +134,21 @@
 
       <div class="sheet" id="sheet-video" hidden>
         <div class="sheet__backdrop" data-close></div>
-        <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-video-title">
+        <div class="sheet__panel sheet__panel--video" role="dialog" aria-modal="true" aria-labelledby="sheet-video-title">
           <header class="sheet__head">
-            <h3 class="sheet__title" id="sheet-video-title">Change video</h3>
+            <h3 class="sheet__title" id="sheet-video-title">Pick a video</h3>
             <button class="icon-btn" type="button" data-close aria-label="Close"><span data-icon="close"></span></button>
           </header>
-          <div class="tabs" id="video-tabs" role="tablist" hidden>
-            <button class="tab" role="tab" type="button" data-tab="link" aria-selected="true">Link</button>
-            <button class="tab" role="tab" type="button" data-tab="library" aria-selected="false">Library</button>
+          <div class="tabs" id="video-tabs" role="tablist" aria-label="Where the video comes from">
+            <button class="tab" role="tab" type="button" data-tab="link" aria-selected="true">
+              <span data-icon="link"></span>Link
+            </button>
+            <button class="tab" role="tab" type="button" data-tab="library" aria-selected="false" hidden>
+              <span data-icon="folder"></span>Library
+            </button>
+            <button class="tab" role="tab" type="button" data-tab="youtube" aria-selected="false">
+              <span data-icon="youtube"></span>YouTube
+            </button>
           </div>
           <div class="tabpanel" data-panel="link">
             <label class="label" for="sheet-url">Video link</label>
@@ -138,6 +164,30 @@
             <input class="input" id="library-search" type="search" placeholder="Search the library" aria-label="Search the library" />
             <ul class="file-list" id="library-list"></ul>
             <p class="hint" id="library-status"></p>
+          </div>
+          <div class="tabpanel yt" data-panel="youtube" hidden>
+            <div class="field-row">
+              <div class="yt__field">
+                <span class="yt__field-icon" data-icon="search"></span>
+                <input class="input yt__input" id="yt-query" type="search" autocomplete="off" spellcheck="false"
+                  placeholder="Search YouTube, or paste a link" aria-label="Search YouTube, or paste a link" />
+              </div>
+              <button class="btn btn--primary" id="yt-submit" type="button">Search</button>
+            </div>
+            <p class="field-error" id="yt-error" role="alert"></p>
+            <div class="yt__bar">
+              <p class="yt__heading" id="yt-heading" dir="auto"></p>
+              <button class="btn btn--text" id="yt-recent" type="button" hidden>Played in this room</button>
+            </div>
+            <div class="yt__scroll" id="yt-scroll">
+              <ul class="yt-grid" id="yt-results"></ul>
+              <div class="yt-empty" id="yt-empty" hidden>
+                <span class="yt-empty__icon" data-icon="youtube"></span>
+                <p class="yt-empty__title">Find something to watch</p>
+                <p class="hint">Search YouTube, or paste a playlist or channel link to see its videos. Paste a video link to play it straight away.</p>
+              </div>
+              <p class="hint yt__status" id="yt-status"></p>
+            </div>
           </div>
         </div>
       </div>
