@@ -133,7 +133,7 @@ export async function probeUrl(raw) {
 
   // Share4Max publishes playable pages under /iframe/<id>. These are not raw
   // video files, so keep the URL as an iframe instead of probing it as HTML.
-  if (/^(?:www\\.)?share4max\\.net$/i.test(url.hostname) && /^\\/iframe\\/[^/]+/i.test(url.pathname)) {
+  if (/^(?:www\.)?share4max\.net$/i.test(url.hostname) && /^\/iframe\/[^/]+/i.test(url.pathname)) {
     return { kind: 'iframe', finalUrl: url.href };
   }
 
