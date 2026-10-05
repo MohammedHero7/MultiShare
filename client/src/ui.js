@@ -46,6 +46,7 @@ export function hideSplash() {
 
 let buffering = false;
 export function setBuffering(value) {
+  if (!$('media-iframe')?.hidden) value = false;
   if (buffering === value) return;
   buffering = value;
   $('leader').hidden = !value;
