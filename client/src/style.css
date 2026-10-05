@@ -24,6 +24,12 @@
   --font-display: 'Big Shoulders Display', 'Arial Narrow', 'Roboto Condensed', sans-serif;
 
   --pad: clamp(14px, 2.4vw, 28px);
+  /* The notch and home bar. Inside Discord's mobile apps the activity is in a frame,
+     where env() reads 0, so Discord passes the insets as --discord-safe-area-inset-*. */
+  --safe-top: var(--discord-safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--discord-safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--discord-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--discord-safe-area-inset-left, env(safe-area-inset-left, 0px));
   --controls-h: 96px;
   --leader-size: clamp(72px, 14vmin, 120px);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -119,7 +125,7 @@ svg {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: max(var(--pad), env(safe-area-inset-top)) var(--pad) 32px;
+  padding: max(var(--pad), var(--safe-top)) max(var(--pad), var(--safe-right)) 32px max(var(--pad), var(--safe-left));
   background: linear-gradient(to bottom, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0));
   transition: opacity 0.3s var(--ease);
   user-select: none;
@@ -213,7 +219,7 @@ svg {
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 44px var(--pad) max(calc(var(--pad) - 4px), env(safe-area-inset-bottom));
+  padding: 44px max(var(--pad), var(--safe-right)) max(calc(var(--pad) - 4px), var(--safe-bottom)) max(var(--pad), var(--safe-left));
   background: linear-gradient(to top, rgb(0 0 0 / 0.84), rgb(0 0 0 / 0.42) 58%, rgb(0 0 0 / 0));
   transition: opacity 0.3s var(--ease);
   user-select: none;
@@ -867,7 +873,7 @@ svg {
 .toasts {
   position: absolute;
   z-index: 40;
-  top: 76px;
+  top: calc(76px + var(--safe-top));
   left: 50%;
   display: grid;
   justify-items: center;
@@ -904,7 +910,7 @@ svg {
 .status {
   position: absolute;
   z-index: 40;
-  top: 16px;
+  top: calc(16px + var(--safe-top));
   left: 50%;
   transform: translateX(-50%);
 }
@@ -967,12 +973,14 @@ svg {
 /* ---------- Sheets ---------- */
 
 .sheet {
+  --gap: var(--pad);
   position: fixed;
   z-index: 50;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: var(--pad);
+  padding: max(var(--gap), var(--safe-top)) max(var(--gap), var(--safe-right)) max(var(--gap), var(--safe-bottom))
+    max(var(--gap), var(--safe-left));
 }
 
 .sheet__backdrop {
@@ -1537,7 +1545,7 @@ svg {
   .sheet__panel {
     width: 100%;
     max-height: 88%;
-    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-bottom: max(24px, var(--safe-bottom));
     border-radius: 18px 18px 0 0;
   }
 
@@ -1657,6 +1665,18 @@ svg {
   }
 }
 
+/* Touch screens: bigger targets, and 16px text so iPhones don't zoom in on a field. */
+@media (pointer: coarse) {
+  .seek {
+    height: 36px;
+  }
+
+  .input,
+  .web__address .input {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1758,7 +1778,7 @@ svg {
 
 /* ---------- Browser (websites opened inside the activity) ---------- */
 .sheet--web {
-  padding: clamp(0px, 2vw, 20px);
+  --gap: clamp(0px, 2vw, 20px);
 }
 .sheet__panel--web {
   display: flex;
@@ -1814,7 +1834,8 @@ svg {
 }
 @media (max-width: 560px) {
   .sheet--web {
-    padding: 0;
+    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    background: var(--velvet-950);
   }
   .sheet__panel--web {
     border-radius: 0;

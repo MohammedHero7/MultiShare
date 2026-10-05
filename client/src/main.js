@@ -705,6 +705,14 @@ function toggleMute() {
   renderVolume();
 }
 
+// iPhones and iPads only change the volume with their buttons; video.volume stays 1.
+const volumeIsFixed = (() => {
+  const probe = document.createElement('video');
+  probe.volume = 0.5;
+  return probe.volume === 1;
+})();
+volumeInput.hidden = volumeIsFixed;
+
 volumeInput.addEventListener('input', () => {
   player.userGesture();
   video.volume = Number(volumeInput.value);
@@ -723,8 +731,14 @@ const canFullscreen = Boolean(document.fullscreenEnabled);
 $('btn-fullscreen').hidden = !canFullscreen;
 function toggleFullscreen() {
   if (!canFullscreen) return;
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  else appEl.requestFullscreen().catch(() => {});
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+    return;
+  }
+  appEl.requestFullscreen().catch(() => {
+    // Some phone apps don't allow full screen; turning the phone gives the same picture.
+    if (matchMedia('(pointer: coarse)').matches) ui.toast('Turn your phone sideways for a bigger picture.');
+  });
 }
 $('btn-fullscreen').addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', () => {
@@ -812,7 +826,10 @@ if ('mediaSession' in navigator) {
 for (const type of ['pointermove', 'pointerdown', 'keydown']) {
   appEl.addEventListener(type, () => ui.wake(), { passive: true });
 }
-ui.setIdlePolicy(() => Boolean(player.state?.media) && !player.state.paused && !player.ended);
+// An embedded player takes every tap itself, so hidden controls could never come back.
+ui.setIdlePolicy(
+  () => Boolean(player.state?.media) && player.state.media.kind !== 'iframe' && !player.state.paused && !player.ended,
+);
 
 /* ---------- Render loop ---------- */
 
