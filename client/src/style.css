@@ -1721,3 +1721,37 @@ svg {
   background: var(--screen);
   z-index: 2;
 }
+
+/* ---------- Google web search ---------- */
+.anime-google {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--velvet-800);
+}
+.anime-google h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+.anime-google > p {
+  margin: 5px 0 0;
+  color: var(--paper-muted);
+  font-size: 12.5px;
+}
+.anime-google__row {
+  margin-top: 12px;
+}
+.anime-google__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 560px) {
+  .anime-google__row {
+    flex-direction: column;
+  }
+  .anime-google__row .btn {
+    width: 100%;
+  }
+}
