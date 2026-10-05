@@ -275,7 +275,10 @@ $('empty-youtube').addEventListener('click', () => openVideoSheet('youtube'));
 // "Change video" goes back to wherever the current video came from.
 const currentSourceTab = () => ({ youtube: 'youtube', library: 'library' })[serverState?.media?.source] ?? 'link';
 $('btn-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
-$('btn-anime3rb').addEventListener('click', () => {\n  ui.wake();\n  ui.openSheet('sheet-anime3rb');\n});
+$('btn-anime3rb').addEventListener('click', () => {
+  ui.wake();
+  ui.openSheet('sheet-anime3rb');
+});
 $('notice-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('splash-retry').addEventListener('click', () => location.reload());
 
