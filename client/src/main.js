@@ -275,10 +275,7 @@ $('empty-youtube').addEventListener('click', () => openVideoSheet('youtube'));
 // "Change video" goes back to wherever the current video came from.
 const currentSourceTab = () => ({ youtube: 'youtube', library: 'library' })[serverState?.media?.source] ?? 'link';
 $('btn-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
-$('btn-anime3rb').addEventListener('click', () => {
-  ui.wake();
-  ui.openSheet('sheet-anime3rb');
-});
+$('btn-anime3rb').addEventListener('click', () => openVideoSheet('anime'));
 $('notice-change').addEventListener('click', () => openVideoSheet(currentSourceTab()));
 $('splash-retry').addEventListener('click', () => location.reload());
 
@@ -298,7 +295,8 @@ const TAB_INPUTS = { link: 'sheet-url', library: 'library-search', youtube: 'yt-
 for (const tab of document.querySelectorAll('#video-tabs [role=tab]')) {
   tab.addEventListener('click', () => {
     selectVideoTab(tab.dataset.tab);
-    $(TAB_INPUTS[tab.dataset.tab]).focus();
+    const inputId = TAB_INPUTS[tab.dataset.tab];
+    if (inputId) $(inputId)?.focus();
   });
 }
 
