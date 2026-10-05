@@ -228,6 +228,7 @@ $('empty-sample').addEventListener('click', () => {
 });
 $('empty-library').addEventListener('click', () => openVideoSheet('library'));
 $('btn-change').addEventListener('click', () => openVideoSheet('link'));
+$('btn-anime3rb').addEventListener('click', () => ui.openSheet('sheet-anime3rb'));
 $('notice-change').addEventListener('click', () => openVideoSheet('link'));
 $('splash-retry').addEventListener('click', () => location.reload());
 
