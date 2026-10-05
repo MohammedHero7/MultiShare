@@ -1245,3 +1245,104 @@ svg {
     transform: rotate(120deg);
   }
 }
+
+
+/* ---------- Anime3rb / AdGuard DNS section ---------- */
+
+.anime-panel {
+  width: min(720px, 100%);
+}
+
+.anime-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 10px;
+  padding: 20px;
+  border: 1px solid var(--velvet-600);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0, rgb(255 181 71 / 0.12), transparent 42%),
+    var(--velvet-900);
+}
+
+.anime-hero__eyebrow {
+  margin: 0 0 5px;
+  color: var(--tungsten);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.anime-hero h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+}
+
+.anime-hero p:last-child {
+  max-width: 58ch;
+  margin: 9px 0 0;
+  color: var(--paper-muted);
+}
+
+.dns-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dns-card {
+  display: grid;
+  gap: 7px;
+  padding: 15px;
+  border: 1px solid var(--velvet-800);
+  border-radius: 12px;
+  background: var(--velvet-900);
+}
+
+.dns-card--wide {
+  grid-column: 1 / -1;
+}
+
+.dns-card__title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.dns-card code {
+  display: block;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--velvet-950);
+  color: var(--paper);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dns-note {
+  margin: 14px 0 0;
+  color: var(--paper-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .anime-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dns-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dns-card--wide {
+    grid-column: auto;
+  }
+}
