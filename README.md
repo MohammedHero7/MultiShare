@@ -56,6 +56,15 @@ The repository includes a `Dockerfile` (the app plus yt-dlp) and a `render.yaml`
 3. When it's live, in the Discord Developer Portal -> Activities -> URL Mappings, map `/` to the
    service's host, e.g. `discord-watch-party.onrender.com` (without https://).
 
+If you made a plain Node web service instead (New -> Web Service, Language: Node), set these in
+its Settings. Render runs Linux, so `winget` doesn't exist there; the build script downloads the
+Linux yt-dlp instead, and each deploy fetches the newest one.
+- Build Command: `npm run render-build`
+- Start Command: `npm start`
+- Environment: `VITE_DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and optionally the other values
+  from `render.yaml` (`MEDIA_SIGNING_SECRET`, `DNS_SERVERS`, `YOUTUBE_MAX_HEIGHT`). The Client ID
+  must be set before the build, since it's built into the activity.
+
 Know the limits of Render's free plan: every viewer's video goes out through the server, and
 5 GB a month is included, after which Render charges per GB or suspends the service. It
 sleeps after 15 minutes without traffic and takes about a minute to wake, so open the activity
