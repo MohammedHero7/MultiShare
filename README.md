@@ -111,6 +111,9 @@ What to expect:
 - Search uses DuckDuckGo, since Google's results need scripts that don't work this way.
 - Cookies (logins, settings) are kept on the server for the session and reset when the activity
   reconnects.
+- Google reCAPTCHA ("I'm not a robot") gets the real site's address, and its box and the page
+  can talk to each other as they would in a normal browser. Google may still show more picture
+  puzzles than usual, since its requests come from your server.
 
 ## Notes
 - Videos stream through your server, since Discord only lets activities reach their own backend.

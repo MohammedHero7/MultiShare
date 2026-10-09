@@ -3,7 +3,8 @@
 //
 // The server already pointed the page's links at /api/web. This does the same for
 // whatever the site's scripts load or open later, stands in for cookies and storage
-// (a sandboxed page has neither), and tells the activity which address is open.
+// (a sandboxed page has neither), carries messages between frames, and tells the
+// activity which address is open.
 (() => {
   const PROXY_PATH = /^(?:\/\.proxy)?\/api\/web\/([\w.-]+)\/(https?)\/([^/?#]+)(.*)$/;
   const current = PROXY_PATH.exec(location.pathname);
@@ -17,6 +18,8 @@
   }
   const prefix = `/.proxy/api/web/${current[1]}/`;
   const script = document.currentScript;
+  // Before the site's scripts get a wrapped one (see "Messages between frames").
+  const nativeParent = window.parent;
 
   /** The website address behind a link to this server, or null. */
   const realUrl = (href) => {
@@ -33,6 +36,16 @@
     return `${match[2]}://${match[3]}${rest}`.replace(/([?&])__mpref=[^&#]*&?/, '$1').replace(/[?&](#|$)/, '$1');
   };
   const pageOrigin = new URL(realUrl(location.href)).origin;
+
+  // reCAPTCHA tells Google which site it's on with "co" in its frame addresses: the
+  // page's origin and port in base64. It works that out from location, which here is
+  // this server, so Google would answer "Invalid domain for site key".
+  const RECAPTCHA_HOST = /^(www\.)?(google\.com|recaptcha\.net)$/i;
+  const recaptchaOrigin = (() => {
+    const { protocol, hostname, port } = new URL(pageOrigin);
+    const origin = `${protocol}//${hostname}:${port || (protocol === 'https:' ? '443' : '80')}`;
+    return btoa(origin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '.');
+  })();
 
   const SKIP = /^(#|javascript:|data:|blob:|about:|mailto:|tel:|sms:)/i;
 
@@ -54,6 +67,9 @@
       return value;
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return value;
+    if (RECAPTCHA_HOST.test(url.hostname) && url.pathname.startsWith('/recaptcha/')) {
+      url.search = url.search.replace(/([?&]co=)[^&]*/, `$1${recaptchaOrigin}`);
+    }
     let { search } = url;
     if (url.origin !== pageOrigin) search = `${search || '?'}${search.length > 1 ? '&' : ''}__mpref=${encodeURIComponent(pageOrigin)}`;
     return `${prefix}${url.protocol.slice(0, -1)}/${url.host}${url.pathname}${search}${url.hash}`;
@@ -135,6 +151,52 @@
       const result = url == null ? native.call(this, state, title) : native.call(this, state, title, proxify(url));
       report(false);
       return result;
+    };
+  }
+
+  /* ---------- Workers ---------- */
+
+  // A sandboxed page can only start a worker from a blob: or data: address. For any
+  // other, the worker starts from a small blob that points the worker's own requests
+  // at this server too, then loads the real script through it.
+  function setUpWorker(proxyOrigin, webPrefix, scriptUrl) {
+    const fix = (value) => {
+      let url;
+      try {
+        url = new URL(String(value), scriptUrl);
+      } catch {
+        return value;
+      }
+      if (url.origin === proxyOrigin || (url.protocol !== 'http:' && url.protocol !== 'https:')) return value;
+      return `${proxyOrigin}${webPrefix}${url.protocol.slice(0, -1)}/${url.host}${url.pathname}${url.search}`;
+    };
+    const nativeImport = self.importScripts;
+    self.importScripts = (...urls) => nativeImport(...urls.map(fix));
+    const nativeWorkerFetch = self.fetch;
+    self.fetch = (input, init) => nativeWorkerFetch(input instanceof Request ? input : fix(input), init);
+    if (self.XMLHttpRequest) {
+      const nativeOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function open(method, url, ...rest) {
+        return nativeOpen.call(this, method, fix(url), ...rest);
+      };
+    }
+  }
+
+  const NativeWorker = window.Worker;
+  if (NativeWorker) {
+    const workerSource = (url, options) => {
+      if (/^\s*(blob|data):/i.test(String(url))) return url;
+      const address = new URL(proxify(url), document.baseURI).href;
+      const real = realUrl(address);
+      if (!real) return url;
+      const setup = `(${setUpWorker})(${JSON.stringify(location.origin)}, ${JSON.stringify(prefix)}, ${JSON.stringify(real)});`;
+      const load = options?.type === 'module' ? `import(${JSON.stringify(address)});` : `importScripts(${JSON.stringify(address)});`;
+      return URL.createObjectURL(new Blob([setup + load], { type: 'text/javascript' }));
+    };
+    window.Worker = class Worker extends NativeWorker {
+      constructor(url, options) {
+        super(workerSource(url, options), options);
+      }
     };
   }
 
@@ -262,12 +324,154 @@
     }
   }
 
+  /* ---------- Messages between frames ---------- */
+
+  // Every page here runs in an opaque origin of its own, and so does every frame in it,
+  // even about:blank. The browser only delivers a message to another frame when
+  // targetOrigin is "*", and says it came from "null", while sites check both
+  // (reCAPTCHA, video players, sign-in widgets). So a message goes out as "*" in an
+  // envelope naming the website origins at both ends, and the runtime in the receiving
+  // page checks the target and unwraps it.
+  const ENVELOPE = '__multishareMessage';
+  const isEnvelope = (data) => data !== null && typeof data === 'object' && data[ENVELOPE] === 1;
+  // A page here also sees this server as its own origin (location.origin).
+  const accepts = (origin) => origin === '*' || origin === pageOrigin || origin === location.origin;
+
+  /** postMessage(message, targetOrigin, transfer) or postMessage(message, { targetOrigin, transfer }). */
+  function readPost([message, second, third]) {
+    const options = second == null || typeof second === 'object' ? (second ?? {}) : null;
+    const target = String(options ? (options.targetOrigin ?? '/') : second);
+    const transfer = (options ? options.transfer : third) ?? [];
+    if (target === '*') return { message, to: '*', transfer };
+    if (target === '/') return { message, to: pageOrigin, transfer };
+    try {
+      return { message, to: new URL(target).origin, transfer };
+    } catch {
+      throw new DOMException(`Invalid target origin '${target}' in a call to 'postMessage'.`, 'SyntaxError');
+    }
+  }
+
+  const nativeSelfPost = window.postMessage;
+
+  function send(target, args) {
+    const { message, to, transfer } = readPost(args);
+    const envelope = { [ENVELOPE]: 1, data: message, from: pageOrigin, to };
+    if (target === window) nativeSelfPost.call(window, envelope, '*', transfer);
+    else target.postMessage(envelope, '*', transfer);
+  }
+
+  // The site's scripts get windows through these wrappers, so postMessage on them
+  // goes through send(). Each window keeps one wrapper, so comparisons still work.
+  const wrappers = new WeakMap();
+  const wrapped = new WeakMap();
+  const posters = new WeakMap();
+  const callers = new WeakMap();
+
+  const isWindow = (value) => {
+    if (value === null || typeof value !== 'object') return false;
+    try {
+      return value.window === value;
+    } catch {
+      return false;
+    }
+  };
+
+  // Functions read through a wrapper still run on the real window.
+  const callable = (fn) => {
+    let caller = callers.get(fn);
+    if (!caller) {
+      caller = new Proxy(fn, { apply: (target, self, args) => Reflect.apply(target, wrapped.get(self) ?? self, args) });
+      callers.set(fn, caller);
+    }
+    return caller;
+  };
+
+  const windowHandler = {
+    get(target, key) {
+      if (key === 'postMessage') {
+        let post = posters.get(target);
+        if (!post) {
+          post = function postMessage(...args) {
+            return send(target, args);
+          };
+          posters.set(target, post);
+        }
+        return post;
+      }
+      const value = Reflect.get(target, key, target);
+      if (isWindow(value)) return wrapWindow(value);
+      return typeof value === 'function' ? callable(value) : value;
+    },
+    set(target, key, value) {
+      return Reflect.set(target, key, key === 'location' ? proxify(value) : value, target);
+    },
+  };
+
+  function wrapWindow(win) {
+    if (win === window || wrapped.has(win) || !isWindow(win)) return win;
+    let wrapper = wrappers.get(win);
+    if (!wrapper) {
+      wrapper = new Proxy(win, windowHandler);
+      wrappers.set(win, wrapper);
+      wrapped.set(wrapper, win);
+    }
+    return wrapper;
+  }
+
+  const patchGetter = (proto, name, map) => {
+    const descriptor = proto && Object.getOwnPropertyDescriptor(proto, name);
+    if (!descriptor?.get) return;
+    Object.defineProperty(proto, name, {
+      ...descriptor,
+      get() {
+        return map.call(this, descriptor.get.call(this));
+      },
+    });
+  };
+
+  const parentDescriptor = Object.getOwnPropertyDescriptor(window, 'parent');
+  if (parentDescriptor?.configurable) {
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      enumerable: parentDescriptor.enumerable,
+      get: () => wrapWindow(nativeParent),
+      set: (value) => Object.defineProperty(window, 'parent', { configurable: true, enumerable: true, writable: true, value }),
+    });
+  }
+  for (const type of [window.HTMLIFrameElement, window.HTMLFrameElement, window.HTMLObjectElement]) {
+    patchGetter(type?.prototype, 'contentWindow', wrapWindow);
+  }
+
+  window.postMessage = function postMessage(...args) {
+    const target = wrapped.get(this) ?? this;
+    return send(isWindow(target) ? target : window, args);
+  };
+
+  // Receiving: drop envelopes meant for another website, and unwrap the rest. This
+  // listener comes before any of the site's own.
+  const eventData = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'data').get;
+  const eventSource = Object.getOwnPropertyDescriptor(MessageEvent.prototype, 'source').get;
+  window.addEventListener(
+    'message',
+    (event) => {
+      const data = eventData.call(event);
+      if (isEnvelope(data) && !accepts(data.to)) event.stopImmediatePropagation();
+    },
+    true,
+  );
+  patchGetter(MessageEvent.prototype, 'data', (data) => (isEnvelope(data) ? data.data : data));
+  patchGetter(MessageEvent.prototype, 'origin', function (origin) {
+    const data = eventData.call(this);
+    return isEnvelope(data) ? data.from : origin;
+  });
+  patchGetter(MessageEvent.prototype, 'source', wrapWindow);
+
   /* ---------- Talking to the activity ---------- */
 
   function report(loading, { leaving = false } = {}) {
-    if (window.parent === window) return;
+    if (nativeParent === window) return;
     const url = leaving ? null : realUrl(location.href);
-    window.parent.postMessage({ type: 'multishare:web', url, title: document.title, loading }, '*');
+    nativeParent.postMessage({ type: 'multishare:web', url, title: document.title, loading }, '*');
   }
 
   report(true);
@@ -277,10 +481,11 @@
   window.addEventListener('hashchange', () => report(false));
 
   window.addEventListener('message', (event) => {
-    if (event.source !== window.parent || event.data?.type !== 'multishare:web-command') return;
-    if (event.data.command === 'pause') {
+    const data = eventData.call(event);
+    if (eventSource.call(event) !== nativeParent || data?.type !== 'multishare:web-command') return;
+    if (data.command === 'pause') {
       for (const media of document.querySelectorAll('video, audio')) media.pause();
-      for (let i = 0; i < window.frames.length; i += 1) window.frames[i].postMessage(event.data, '*');
+      for (let i = 0; i < window.frames.length; i += 1) window.frames[i].postMessage(data, '*');
     }
   });
 })();
