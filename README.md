@@ -58,7 +58,9 @@ The repository includes a `Dockerfile` (the app plus yt-dlp) and a `render.yaml`
 
 If you made a plain Node web service instead (New -> Web Service, Language: Node), set these in
 its Settings. Render runs Linux, so `winget` doesn't exist there; the build script downloads the
-Linux yt-dlp instead, and each deploy fetches the newest one.
+Linux yt-dlp instead, and each deploy fetches the newest one. It must be a Web Service, not a
+Static Site: the activity needs its server running (sign-in, sync, video), and a Static Site
+fails with "Publish directory ... does not exist".
 - Build Command: `npm run render-build`
 - Start Command: `npm start`
 - Environment: `VITE_DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and optionally the other values
