@@ -12,6 +12,8 @@
     "build": "npm run build -w client",
     "start": "npm start -w server",
     "register": "npm run register -w server",
+    "yt-dlp": "node server/scripts/install-yt-dlp.js",
+    "render-build": "npm install --include=dev && npm run build && npm run yt-dlp",
     "tunnel": "cloudflared tunnel --url http://localhost:5173"
   },
   "devDependencies": {

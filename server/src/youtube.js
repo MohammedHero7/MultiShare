@@ -28,7 +28,10 @@ const BROWSE_TIMEOUT_MS = 30_000;
 const BROWSE_CACHE_MS = 10 * 60 * 1000;
 const SEARCH_RESULTS = 24;
 const LIST_RESULTS = 60;
-const INSTALL_HINT = 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.';
+const INSTALL_HINT =
+  process.platform === 'win32'
+    ? 'Install it with "winget install yt-dlp.yt-dlp", then restart npm run dev in a new terminal.'
+    : 'Run "npm run yt-dlp" in the project folder (on Render, set the Build Command to "npm run render-build"), then restart the server.';
 const UPDATE_HINT = 'Updating yt-dlp often fixes this: run "yt-dlp -U" or "winget upgrade yt-dlp.yt-dlp".';
 // Each yt-dlp run is a Python process plus a Node process, so only a few run at
 // once and a short queue waits; anything beyond that is turned away.

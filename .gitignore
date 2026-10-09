@@ -9,6 +9,9 @@ node_modules/
 # Client build output (npm run build)
 client/dist/
 
+# yt-dlp downloaded by npm run yt-dlp / render-build
+bin/
+
 # Logs
 npm-debug.log*
 *.log

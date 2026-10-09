@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,12 @@ function pickDnsServers(value) {
   return servers.filter((entry) => net.isIP(entry) !== 0);
 }
 
+/** yt-dlp from `npm run yt-dlp` (bin/ at the project root) when there is one, otherwise the one on PATH. */
+function pickYtDlp() {
+  const bundled = path.join(ROOT_DIR, 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  return fs.existsSync(bundled) ? bundled : 'yt-dlp';
+}
+
 function pickEncoding(name) {
   try {
     new TextDecoder(name);
@@ -41,7 +48,7 @@ export const config = {
   allowPrivateUrls: flag('ALLOW_PRIVATE_URLS'),
   dnsServers: pickDnsServers(env('DNS_SERVERS')),
   subtitleFallbackEncoding: pickEncoding(env('SUBTITLE_FALLBACK_ENCODING', 'windows-1256') || 'windows-1256'),
-  ytDlpPath: env('YTDLP_PATH') || 'yt-dlp',
+  ytDlpPath: env('YTDLP_PATH') || pickYtDlp(),
   youtubeMaxHeight: Math.max(144, Number.parseInt(env('YOUTUBE_MAX_HEIGHT'), 10) || 1080),
   signingSecret: env('MEDIA_SIGNING_SECRET') || crypto.randomBytes(32).toString('hex'),
   clientDist: path.join(ROOT_DIR, 'client', 'dist'),
